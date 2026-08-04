@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup and transfer rules for Android 12 (API 31) and above.
+
+  The privacy policy states that the sign-in token "is excluded from phone
+  backups and device-to-device transfers, so a restored copy cannot sign in as
+  you". This file is what makes that sentence true; without it the claim is
+  wrong, and a policy that overstates what the software does is worse than none.
+
+  flutter_secure_storage keeps its values in a SharedPreferences file named
+  FlutterSecureStorage, encrypted with a key held in the hardware-backed
+  AndroidKeyStore. The keystore key is never included in a backup, so a restored
+  copy would in practice hold ciphertext it cannot read — but that is a property
+  of the platform, not a decision this app made. Excluding the file explicitly
+  means the guarantee survives a plugin swapping its storage for something
+  weaker, which is exactly when the policy would silently become false.
+
+  device-transfer matters as much as cloud-backup here: phone-to-phone setup
+  copies app data directly and skips the cloud path entirely.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </cloud-backup>
+
+    <device-transfer>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The same exclusion for Android 11 (API 30) and below, which ignore
+  data_extraction_rules.xml and read this file instead. Both have to exist:
+  dropping either one leaves the token backed up on that range of devices, and
+  the privacy policy makes no exception for older phones.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+</full-backup-content>

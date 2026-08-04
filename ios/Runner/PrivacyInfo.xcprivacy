@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Apple's privacy manifest. Required for App Store submission, and it has to
+  agree with the privacy nutrition labels filled in on App Store Connect and
+  with /privacy on the server — three descriptions of the same thing, and a
+  reviewer will compare them.
+
+  IMPORTANT: this file is not in the Xcode project yet. A file sitting in the
+  folder is not in the bundle. On a Mac, open ios/Runner.xcworkspace, drag
+  PrivacyInfo.xcprivacy into the Runner group, and tick the Runner target so it
+  lands in Copy Bundle Resources. Until then it ships as if absent.
+
+  What is declared and why:
+
+  Tracking is false. The app has no advertising SDK, no analytics, and never
+  shares anything with a third party — the only host it talks to is the
+  employer's own server.
+
+  Location is deliberately NOT listed, because the app does not capture it. The
+  server records a coordinate when a punch arrives with one, and the Flutter app
+  has no location plugin wired, so it never sends one. Add
+  NSPrivacyCollectedDataTypeCoarseLocation here when B2.3 is built — before it
+  ships, not after.
+
+  NSPrivacyAccessedAPITypes is empty: the app's own code uses no required-reason
+  API. The plugins that do (Firebase, path_provider) ship their own manifests,
+  which Xcode merges at build time.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- Shown on the profile screen and used to address notifications. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- The sign-in identifier, and where leave decisions are emailed. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Employee record: staff number, department, job title, reporting line. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Punch times, worked hours and leave records — the point of the app. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>
