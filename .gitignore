@@ -43,3 +43,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing. A keystore in version control can sign a malicious update
+# that Play accepts as genuine, and the passwords sit alongside it.
+/android/key.properties
+*.jks
+*.keystore
+
+# Firebase client configuration, per project rather than per developer.
+# Not a secret in the way the service-account key is — these identify the app,
+# they do not authorise sending — but they tie a build to one Firebase project
+# and are reissued from the console, so they are placed rather than committed.
+# See Push-Notifications_Setup.md.
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist

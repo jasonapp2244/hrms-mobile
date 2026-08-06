@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
@@ -11,7 +13,12 @@ import '../widgets/async_view.dart';
 /// to the caller's own direct reports, so the permission alone reaches nobody
 /// else's team.
 class ApprovalsScreen extends StatelessWidget {
-  const ApprovalsScreen({super.key});
+  const ApprovalsScreen({super.key, required this.visible});
+
+  /// Set by `HomeShell` while this tab is the one on screen. Both sub-tabs
+  /// watch it: an approval decided on the web should not still be sitting in
+  /// the inbox when the manager comes back to this screen.
+  final ValueListenable<bool> visible;
 
   @override
   Widget build(BuildContext context) {
@@ -27,8 +34,11 @@ class ApprovalsScreen extends StatelessWidget {
             ],
           ),
         ),
-        body: const TabBarView(
-          children: [_ApprovalsTab(), _TeamTab()],
+        body: TabBarView(
+          children: [
+            _ApprovalsTab(visible: visible),
+            _TeamTab(visible: visible),
+          ],
         ),
       ),
     );
@@ -40,16 +50,24 @@ class ApprovalsScreen extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _ApprovalsTab extends StatefulWidget {
-  const _ApprovalsTab();
+  const _ApprovalsTab({required this.visible});
+
+  final ValueListenable<bool> visible;
 
   @override
   State<_ApprovalsTab> createState() => _ApprovalsTabState();
 }
 
-class _ApprovalsTabState extends State<_ApprovalsTab> {
+class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
   List<PendingApproval> _pending = const [];
   bool _loading = true;
   String? _error;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
 
   @override
   void initState() {
@@ -57,9 +75,11 @@ class _ApprovalsTabState extends State<_ApprovalsTab> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [silent] leaves the current inbox on screen while it is refetched, for
+  /// refreshes the user did not explicitly ask for.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -85,7 +105,8 @@ class _ApprovalsTabState extends State<_ApprovalsTab> {
   Future<void> _approve(PendingApproval item) async {
     final note = await _askForNote(
       title: 'Approve ${item.employee}?',
-      body: 'This passes the request to HR for the final decision. '
+      body:
+          'This passes the request to HR for the final decision. '
           'Nothing comes off their balance at this step.',
       hint: 'Note for HR (optional)',
       confirmLabel: 'Approve',
@@ -181,7 +202,9 @@ class _ApprovalsTabState extends State<_ApprovalsTab> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: valid ? () => Navigator.pop(ctx, controller.text.trim()) : null,
+                onPressed: valid
+                    ? () => Navigator.pop(ctx, controller.text.trim())
+                    : null,
                 child: Text(confirmLabel),
               ),
             ],
@@ -275,14 +298,20 @@ class _ApprovalCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.late.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.late.withValues(alpha: 0.32)),
+                  border: Border.all(
+                    color: AppTheme.late.withValues(alpha: 0.32),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded, size: 17, color: AppTheme.late),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 17,
+                          color: AppTheme.late,
+                        ),
                         const SizedBox(width: 7),
                         Text(
                           'Also off then',
@@ -299,7 +328,9 @@ class _ApprovalCard extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           '${clash.employee} · ${Fmt.range(clash.startDate, clash.endDate)}',
-                          style: theme.textTheme.bodySmall?.copyWith(color: AppTheme.late),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppTheme.late,
+                          ),
                         ),
                       ),
                   ],
@@ -339,17 +370,25 @@ class _ApprovalCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _TeamTab extends StatefulWidget {
-  const _TeamTab();
+  const _TeamTab({required this.visible});
+
+  final ValueListenable<bool> visible;
 
   @override
   State<_TeamTab> createState() => _TeamTabState();
 }
 
-class _TeamTabState extends State<_TeamTab> {
+class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
   TeamSummary? _summary;
   List<TeamMember> _team = const [];
   bool _loading = true;
   String? _error;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
 
   @override
   void initState() {
@@ -357,9 +396,11 @@ class _TeamTabState extends State<_TeamTab> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [silent] leaves the current board on screen while it is refetched — who
+  /// is in today changes through the day, so this tab goes stale fastest.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -400,7 +441,8 @@ class _TeamTabState extends State<_TeamTab> {
                   EmptyState(
                     icon: Icons.groups_outlined,
                     title: 'Nobody reports to you',
-                    subtitle: 'Company-wide attendance lives in the web dashboard.',
+                    subtitle:
+                        'Company-wide attendance lives in the web dashboard.',
                   ),
                 ],
               )
@@ -474,11 +516,27 @@ class _TeamSummaryCard extends StatelessWidget {
               spacing: 24,
               runSpacing: 12,
               children: [
-                _Pill(label: 'Turned up', value: summary.present, color: AppTheme.present),
+                _Pill(
+                  label: 'Turned up',
+                  value: summary.present,
+                  color: AppTheme.present,
+                ),
                 _Pill(label: 'Late', value: summary.late, color: AppTheme.late),
-                _Pill(label: 'On leave', value: summary.onLeave, color: AppTheme.leave),
-                _Pill(label: 'Absent', value: summary.absent, color: AppTheme.absent),
-                _Pill(label: 'Off', value: summary.off, color: AppTheme.neutral),
+                _Pill(
+                  label: 'On leave',
+                  value: summary.onLeave,
+                  color: AppTheme.leave,
+                ),
+                _Pill(
+                  label: 'Absent',
+                  value: summary.absent,
+                  color: AppTheme.absent,
+                ),
+                _Pill(
+                  label: 'Off',
+                  value: summary.off,
+                  color: AppTheme.neutral,
+                ),
               ],
             ),
           ],
@@ -561,11 +619,11 @@ class _TeamRow extends StatelessWidget {
               ),
             )
           : (member.workedMinutes > 0
-              ? Text(
-                  Fmt.duration(member.workedMinutes),
-                  style: theme.textTheme.bodySmall,
-                )
-              : null),
+                ? Text(
+                    Fmt.duration(member.workedMinutes),
+                    style: theme.textTheme.bodySmall,
+                  )
+                : null),
     );
   }
 }

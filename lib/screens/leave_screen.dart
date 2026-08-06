@@ -1,23 +1,34 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
 
 class LeaveScreen extends StatefulWidget {
-  const LeaveScreen({super.key});
+  const LeaveScreen({super.key, required this.visible});
+
+  /// Set by `HomeShell` while this tab is the one on screen.
+  final ValueListenable<bool> visible;
 
   @override
   State<LeaveScreen> createState() => _LeaveScreenState();
 }
 
-class _LeaveScreenState extends State<LeaveScreen> {
+class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
   List<LeaveBalance> _balances = const [];
   List<LeaveRequest> _requests = const [];
   bool _loading = true;
   String? _error;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
 
   @override
   void initState() {
@@ -25,9 +36,11 @@ class _LeaveScreenState extends State<LeaveScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [silent] leaves the current balances and requests on screen while the new
+  /// ones are fetched, for refreshes the user did not explicitly ask for.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -82,8 +95,14 @@ class _LeaveScreenState extends State<LeaveScreen> {
           '${request.status == 'approved' ? '\n\nThe days go back onto your balance.' : ''}',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Withdraw')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Withdraw'),
+          ),
         ],
       ),
     );
@@ -91,11 +110,13 @@ class _LeaveScreenState extends State<LeaveScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await SessionScope.read(context).api.post('/leave/requests/${request.id}/cancel');
+      await SessionScope.read(
+        context,
+      ).api.post('/leave/requests/${request.id}/cancel');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request withdrawn.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Request withdrawn.')));
       _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -214,7 +235,10 @@ class _BalanceCard extends StatelessWidget {
                 children: [
                   Text(
                     balance.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -251,7 +275,10 @@ class _BalanceCard extends StatelessWidget {
                 ],
               )
             else
-              Icon(Icons.all_inclusive, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.all_inclusive,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),
@@ -292,11 +319,17 @@ class _RequestCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     request.leaveType,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.13),
                     borderRadius: BorderRadius.circular(20),
@@ -305,7 +338,11 @@ class _RequestCard extends StatelessWidget {
                     // "Pending" alone does not say who to chase, so the server
                     // sends a stage: Awaiting Manager, Awaiting HR, or final.
                     request.stage,
-                    style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -318,7 +355,8 @@ class _RequestCard extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            if (request.decisionNote != null && request.decisionNote!.isNotEmpty) ...[
+            if (request.decisionNote != null &&
+                request.decisionNote!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -336,7 +374,10 @@ class _RequestCard extends StatelessWidget {
             if (request.canCancel)
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(onPressed: onCancel, child: const Text('Withdraw')),
+                child: TextButton(
+                  onPressed: onCancel,
+                  child: const Text('Withdraw'),
+                ),
               )
             else
               const SizedBox(height: 4),
@@ -347,11 +388,11 @@ class _RequestCard extends StatelessWidget {
   }
 
   static (Color, String) _statusStyle(String status) => switch (status) {
-        'approved' => (AppTheme.present, 'Approved'),
-        'rejected' => (AppTheme.absent, 'Rejected'),
-        'cancelled' => (AppTheme.neutral, 'Withdrawn'),
-        _ => (AppTheme.late, 'Pending'),
-      };
+    'approved' => (AppTheme.present, 'Approved'),
+    'rejected' => (AppTheme.absent, 'Rejected'),
+    'cancelled' => (AppTheme.neutral, 'Withdrawn'),
+    _ => (AppTheme.late, 'Pending'),
+  };
 }
 
 /// The apply form.
@@ -424,21 +465,28 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
     });
 
     try {
-      final res = await SessionScope.read(context).api.post('/leave/requests', body: {
-        'leave_type_id': _type.leaveTypeId,
-        'start_date': _ymd(_start!),
-        'end_date': _ymd(_end!),
-        if (_halfDay) 'is_half_day': true,
-        if (_halfDay) 'half_day_period': _halfPeriod,
-        if (_reason.text.trim().isNotEmpty) 'reason': _reason.text.trim(),
-      });
+      final res = await SessionScope.read(context).api.post(
+        '/leave/requests',
+        body: {
+          'leave_type_id': _type.leaveTypeId,
+          'start_date': _ymd(_start!),
+          'end_date': _ymd(_end!),
+          if (_halfDay) 'is_half_day': true,
+          if (_halfDay) 'half_day_period': _halfPeriod,
+          if (_reason.text.trim().isNotEmpty) 'reason': _reason.text.trim(),
+        },
+      );
 
       if (!mounted) return;
-      final request = LeaveRequest.fromJson(res['request'] as Map<String, dynamic>);
+      final request = LeaveRequest.fromJson(
+        res['request'] as Map<String, dynamic>,
+      );
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Applied for ${Fmt.days(request.days)} — ${request.stage.toLowerCase()}.'),
+          content: Text(
+            'Applied for ${Fmt.days(request.days)} — ${request.stage.toLowerCase()}.',
+          ),
           backgroundColor: AppTheme.present,
         ),
       );
@@ -483,7 +531,9 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
           children: [
             Text(
               'Apply for leave',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -513,12 +563,16 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
                   DropdownMenuItem(
                     value: b.leaveTypeId,
                     child: Text(
-                      b.isCapped ? '${b.name} (${_LeaveNum.of(b.availableDays)} left)' : b.name,
+                      b.isCapped
+                          ? '${b.name} (${_LeaveNum.of(b.availableDays)} left)'
+                          : b.name,
                     ),
                   ),
               ],
               onChanged: (v) {
-                final match = widget.balances.firstWhere((b) => b.leaveTypeId == v);
+                final match = widget.balances.firstWhere(
+                  (b) => b.leaveTypeId == v,
+                );
                 setState(() {
                   _type = match;
                   if (!match.allowHalfDay) _halfDay = false;
@@ -533,7 +587,8 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Dates',
-                  errorText: _fieldErrors['start_date'] ?? _fieldErrors['end_date'],
+                  errorText:
+                      _fieldErrors['start_date'] ?? _fieldErrors['end_date'],
                   suffixIcon: const Icon(Icons.calendar_today, size: 20),
                 ),
                 child: Text(
@@ -557,10 +612,14 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'first_half', label: Text('Morning')),
-                    ButtonSegment(value: 'second_half', label: Text('Afternoon')),
+                    ButtonSegment(
+                      value: 'second_half',
+                      label: Text('Afternoon'),
+                    ),
                   ],
                   selected: {_halfPeriod},
-                  onSelectionChanged: (s) => setState(() => _halfPeriod = s.first),
+                  onSelectionChanged: (s) =>
+                      setState(() => _halfPeriod = s.first),
                 ),
             ],
 
@@ -584,7 +643,10 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Text('Submit request'),
             ),

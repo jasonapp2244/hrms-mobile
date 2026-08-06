@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
@@ -12,17 +14,26 @@ import '../widgets/async_view.dart';
 /// back to the standing shift as though it did not exist; staff watching draft
 /// days move around is the problem publishing exists to prevent.
 class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key});
+  const ScheduleScreen({super.key, required this.visible});
+
+  /// Set by `HomeShell` while this tab is the one on screen.
+  final ValueListenable<bool> visible;
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> {
+class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
   List<ScheduleDay> _days = const [];
   ShiftInfo? _standing;
   bool _loading = true;
   String? _error;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
 
   @override
   void initState() {
@@ -30,9 +41,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [silent] leaves the current roster on screen while the new one is
+  /// fetched, for refreshes the user did not explicitly ask for.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -79,7 +92,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     EmptyState(
                       icon: Icons.calendar_month,
                       title: 'No schedule published',
-                      subtitle: 'Your roster will appear here once HR publishes it.',
+                      subtitle:
+                          'Your roster will appear here once HR publishes it.',
                     ),
                   ],
                 )
@@ -100,13 +114,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   children: [
                                     Text(
                                       'Standing shift',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                     Text(
                                       '${_standing!.name} · ${_standing!.window}',
-                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -147,11 +166,27 @@ class _ScheduleRow extends StatelessWidget {
     // Order matters: leave and holidays override the shift that would
     // otherwise show, because they are why nobody is working it.
     final (label, color, icon) = switch (true) {
-      _ when day.leave != null => (day.leave!, AppTheme.leave, Icons.beach_access),
-      _ when day.holiday != null => (day.holiday!, AppTheme.neutral, Icons.celebration),
+      _ when day.leave != null => (
+        day.leave!,
+        AppTheme.leave,
+        Icons.beach_access,
+      ),
+      _ when day.holiday != null => (
+        day.holiday!,
+        AppTheme.neutral,
+        Icons.celebration,
+      ),
       _ when day.isDayOff => ('Day off', AppTheme.neutral, Icons.weekend),
-      _ when !day.isWorkingDay => ('Weekend', AppTheme.neutral, Icons.weekend_outlined),
-      _ when day.shift != null => (day.shift!.window, AppTheme.present, Icons.schedule),
+      _ when !day.isWorkingDay => (
+        'Weekend',
+        AppTheme.neutral,
+        Icons.weekend_outlined,
+      ),
+      _ when day.shift != null => (
+        day.shift!.window,
+        AppTheme.present,
+        Icons.schedule,
+      ),
       _ => ('No shift', AppTheme.neutral, Icons.remove),
     };
 
@@ -181,7 +216,11 @@ class _ScheduleRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 14),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -201,7 +240,11 @@ class _ScheduleRow extends StatelessWidget {
               ),
               child: const Text(
                 'rostered',
-                style: TextStyle(fontSize: 10.5, color: AppTheme.brandDeep, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: AppTheme.brandDeep,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             )
           : null,

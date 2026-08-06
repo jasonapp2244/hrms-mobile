@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api_client.dart';
 import '../core/theme.dart';
 import '../main.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -159,12 +160,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    Text(
-                      'Forgotten your password? HR can reset it for you.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                    TextButton(
+                      // Was "HR can reset it for you", which was true only
+                      // because nothing else existed — and no help at all to
+                      // the one account HR cannot reset, the administrator's.
+                      onPressed: _busy
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => ForgotPasswordScreen(
+                                    initialEmail: _email.text.trim(),
+                                  ),
+                                ),
+                              ),
+                      child: const Text('Forgotten your password?'),
                     ),
                     const SizedBox(height: 8),
                     Text(

@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
@@ -11,13 +13,16 @@ import '../widgets/async_view.dart';
 /// The home screen: one big button, and enough context around it that somebody
 /// can tell at a glance whether they are clocked in and for how long.
 class PunchScreen extends StatefulWidget {
-  const PunchScreen({super.key});
+  const PunchScreen({super.key, required this.visible});
+
+  /// Set by `HomeShell` while this tab is the one on screen.
+  final ValueListenable<bool> visible;
 
   @override
   State<PunchScreen> createState() => _PunchScreenState();
 }
 
-class _PunchScreenState extends State<PunchScreen> {
+class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   TodayStatus? _today;
   bool _loading = true;
   bool _punching = false;
@@ -28,6 +33,12 @@ class _PunchScreenState extends State<PunchScreen> {
   /// refreshes without hammering the endpoint.
   Timer? _ticker;
   DateTime? _loadedAt;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
 
   @override
   void initState() {
@@ -44,9 +55,11 @@ class _PunchScreenState extends State<PunchScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// [silent] keeps the current card on screen while the new status is
+  /// fetched, for refreshes the user did not explicitly ask for.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -85,12 +98,17 @@ class _PunchScreenState extends State<PunchScreen> {
     setState(() => _punching = true);
 
     try {
-      final api = SessionScope.read(context).api;
+      final session = SessionScope.read(context);
 
       // Location is a record, not a gate — office, remote and hybrid staff all
-      // clock in from wherever they are. No location plugin is wired yet, so
-      // the punch simply goes without it, which the API explicitly allows.
-      final res = await api.post('/attendance/check');
+      // clock in from wherever they are. The locator returns an empty body
+      // rather than throwing when there is no fix, no permission or no signal,
+      // so a punch is never lost to a missing coordinate; it is just recorded
+      // without one, which the API explicitly allows.
+      final res = await session.api.post(
+        '/attendance/check',
+        body: await session.locator.punchBody(),
+      );
       final punch = Punch.fromJson(res['punch'] as Map<String, dynamic>);
 
       if (!mounted) return;
@@ -123,11 +141,13 @@ class _PunchScreenState extends State<PunchScreen> {
   void _showResult(String message, Color color) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        duration: const Duration(seconds: 3),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+          duration: const Duration(seconds: 3),
+        ),
+      );
   }
 
   @override
@@ -208,7 +228,9 @@ class _StatusCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   clockedIn ? 'Clocked in' : 'Not clocked in',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -247,7 +269,11 @@ class _StatusCard extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Icon(Icons.schedule, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  Icon(
+                    Icons.schedule,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -284,10 +310,15 @@ class _PunchButton extends StatelessWidget {
         onPressed: busy ? null : onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: clockingIn ? AppTheme.brand : AppTheme.brandDeep,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
         ),
         child: busy
-            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.6)
+            ? const CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.6,
+              )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -295,7 +326,10 @@ class _PunchButton extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     clockingIn ? 'Check in' : 'Check out',
-                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   // can_check is false only while the duplicate cooldown runs.
                   // Say why the button is dead rather than letting a tap fail.
@@ -304,7 +338,10 @@ class _PunchButton extends StatelessWidget {
                       padding: EdgeInsets.only(top: 4),
                       child: Text(
                         'Just a moment — your last punch is still registering',
-                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w400),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w400,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -327,9 +364,17 @@ class _DayNotes extends StatelessWidget {
   Widget build(BuildContext context) {
     final notes = <(IconData, String, Color)>[
       if (today.holiday != null)
-        (Icons.celebration_outlined, 'Company holiday — ${today.holiday}', AppTheme.neutral),
+        (
+          Icons.celebration_outlined,
+          'Company holiday — ${today.holiday}',
+          AppTheme.neutral,
+        ),
       if (today.leave != null)
-        (Icons.beach_access_outlined, 'You are on ${today.leave} today', AppTheme.leave),
+        (
+          Icons.beach_access_outlined,
+          'You are on ${today.leave} today',
+          AppTheme.leave,
+        ),
       if (today.isDayOff)
         (Icons.weekend_outlined, 'Rostered off today', AppTheme.neutral),
     ];
@@ -353,7 +398,10 @@ class _DayNotes extends StatelessWidget {
                   Icon(icon, size: 19, color: color),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(text, style: TextStyle(color: color, fontSize: 14)),
+                    child: Text(
+                      text,
+                      style: TextStyle(color: color, fontSize: 14),
+                    ),
                   ),
                 ],
               ),
@@ -393,13 +441,17 @@ class _PunchList extends StatelessWidget {
                 ListTile(
                   leading: Icon(
                     punches[i].isIn ? Icons.login : Icons.logout,
-                    color: punches[i].isIn ? AppTheme.present : AppTheme.neutral,
+                    color: punches[i].isIn
+                        ? AppTheme.present
+                        : AppTheme.neutral,
                   ),
                   title: Text(
                     punches[i].isIn ? 'Checked in' : 'Checked out',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: punches[i].office != null ? Text(punches[i].office!) : null,
+                  subtitle: punches[i].office != null
+                      ? Text(punches[i].office!)
+                      : null,
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -409,9 +461,15 @@ class _PunchList extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       if (punches[i].status == 'late')
-                        const Text('late', style: TextStyle(fontSize: 11, color: AppTheme.late))
+                        const Text(
+                          'late',
+                          style: TextStyle(fontSize: 11, color: AppTheme.late),
+                        )
                       else if (punches[i].status == 'early_leave')
-                        const Text('early', style: TextStyle(fontSize: 11, color: AppTheme.late)),
+                        const Text(
+                          'early',
+                          style: TextStyle(fontSize: 11, color: AppTheme.late),
+                        ),
                     ],
                   ),
                 ),

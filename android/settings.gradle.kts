@@ -21,6 +21,12 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.9.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+
+    // Turns google-services.json into the resources the Firebase SDK reads at
+    // startup. Declared here but applied in app/build.gradle.kts only when that
+    // file exists — see the comment there. Nothing is added to the build until
+    // it does.
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")

@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'api_client.dart';
+import 'location.dart';
 import 'models.dart';
+import 'push.dart';
 
 /// Signed-in state for the whole app.
 ///
@@ -10,15 +12,38 @@ import 'models.dart';
 /// exactly one piece of global state here — who is signed in — and a package
 /// would be more machinery than the problem needs.
 class Session extends ChangeNotifier {
-  Session({ApiClient? api, FlutterSecureStorage? storage})
-      : api = api ?? ApiClient(),
+  Session({
+    ApiClient? api,
+    FlutterSecureStorage? storage,
+    PunchLocator? locator,
+    PushProvider pushProvider = const DisabledPushProvider(),
+  })  : api = api ?? ApiClient(),
         // Defaults are correct on both platforms now: the plugin uses the
         // Keychain on iOS and its own ciphers on Android. The old
         // encryptedSharedPreferences flag is deprecated and ignored.
-        _storage = storage ?? const FlutterSecureStorage();
+        _storage = storage ?? const FlutterSecureStorage(),
+        locator = locator ??
+            const PunchLocator(source: GeolocatorLocationSource()) {
+    push = PushService(api: this.api, provider: pushProvider);
+  }
 
   final ApiClient api;
   final FlutterSecureStorage _storage;
+
+  /// Registration of this handset for notifications.
+  ///
+  /// Lives here because it is a consequence of the session: a token is worth
+  /// registering only while somebody is signed in, and has to be withdrawn the
+  /// moment they are not. Defaults to a provider that receives nothing, so a
+  /// test — and a build with no Firebase credentials — behaves exactly as the
+  /// app did before push existed.
+  late final PushService push;
+
+  /// Supplies the coordinates attached to a punch. Injectable for the same
+  /// reason [api] is: a headless test has no platform channel to answer the
+  /// location plugin. It resolves to null there rather than failing, so a test
+  /// that does not care about location does not have to stub one.
+  final PunchLocator locator;
 
   static const _tokenKey = 'hrms_api_token';
   static const _deviceNameKey = 'hrms_device_name';
@@ -72,6 +97,11 @@ class Session extends ChangeNotifier {
       api.token = token;
       final res = await api.get('/auth/me');
       _user = AppUser.fromJson(res['user'] as Map<String, dynamic>);
+
+      // Every launch, not only the first: the OS reissues push tokens on its
+      // own schedule, and a handset the server can no longer reach is
+      // indistinguishable from one that never registered.
+      await _startPush();
     } on ApiException catch (e) {
       if (e.isUnauthenticated) {
         // The token was revoked server-side — signed out on another device, or
@@ -103,6 +133,24 @@ class Session extends ChangeNotifier {
 
     _user = AppUser.fromJson(res['user'] as Map<String, dynamic>);
     notifyListeners();
+
+    // After the user is published, not before: the permission prompt should
+    // appear over the app rather than over the login screen.
+    await _startPush();
+  }
+
+  /// Registers this handset for notifications, and never gets in the way.
+  ///
+  /// Signing in is the primary job. A push registration that fails — no
+  /// Firebase project, permission refused, the network down — must leave
+  /// somebody signed in and able to clock in, so nothing here is allowed to
+  /// escape.
+  Future<void> _startPush() async {
+    try {
+      await push.start(deviceName: await deviceName());
+    } catch (e) {
+      debugPrint('Push start failed: $e');
+    }
   }
 
   /// Signs out this device only.
@@ -110,10 +158,16 @@ class Session extends ChangeNotifier {
   /// The push token goes with it: without that the handset keeps receiving the
   /// previous person's notifications, which on a shared work phone means one
   /// employee reading another's leave decisions.
+  ///
+  /// [pushToken] is only for a caller that already knows one. Left off — which
+  /// is what every screen does — the token is taken from [push], so no call
+  /// site has to remember that push exists.
   Future<void> logout({String? pushToken}) async {
+    final token = pushToken ?? await push.stop();
+
     try {
       await api.post('/auth/logout', body: {
-        if (pushToken != null) 'push_token': pushToken,
+        if (token != null) 'push_token': token,
       });
     } on ApiException {
       // A failed logout call must not strand somebody in a signed-in UI they
@@ -126,6 +180,11 @@ class Session extends ChangeNotifier {
 
   /// Signs out everywhere and drops every registered handset — for a lost phone.
   Future<int> logoutEverywhere() async {
+    // The server drops every registered handset on this endpoint, so there is
+    // nothing to unregister — but this one still has to stop listening and
+    // throw its own token away.
+    await push.stop();
+
     int revoked = 0;
     try {
       final res = await api.post('/auth/logout-all');
@@ -159,5 +218,11 @@ class Session extends ChangeNotifier {
   Future<void> _clearToken() async {
     await _storage.delete(key: _tokenKey);
     api.token = null;
+  }
+
+  @override
+  void dispose() {
+    push.dispose();
+    super.dispose();
   }
 }

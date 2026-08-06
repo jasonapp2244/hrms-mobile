@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
@@ -9,13 +11,16 @@ import '../widgets/async_view.dart';
 /// One row per day, newest first — "did I make it in, and when" is a
 /// day-shaped question, so the API answers it in days rather than punches.
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({super.key, required this.visible});
+
+  /// Set by `HomeShell` while this tab is the one on screen.
+  final ValueListenable<bool> visible;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
   List<HistoryDay> _days = const [];
   HistoryTotals? _totals;
   bool _loading = true;
@@ -25,14 +30,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   int _rangeDays = 30;
 
   @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
+
+  @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
+  /// [silent] leaves the current rows on screen while the new ones are
+  /// fetched, for refreshes the user did not explicitly ask for.
+  Future<void> _load({bool silent = false}) async {
     setState(() {
-      _loading = true;
+      _loading = !silent;
       _error = null;
     });
 
@@ -41,10 +54,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final to = DateTime.now();
       final from = to.subtract(Duration(days: _rangeDays - 1));
 
-      final res = await api.get('/attendance/history', query: {
-        'from': _ymd(from),
-        'to': _ymd(to),
-      });
+      final res = await api.get(
+        '/attendance/history',
+        query: {'from': _ymd(from), 'to': _ymd(to)},
+      );
 
       if (!mounted) return;
       setState(() {
@@ -108,7 +121,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     EmptyState(
                       icon: Icons.history,
                       title: 'Nothing recorded yet',
-                      subtitle: 'Your attendance will appear here once you clock in.',
+                      subtitle:
+                          'Your attendance will appear here once you clock in.',
                     ),
                   ],
                 )
@@ -166,10 +180,26 @@ class _TotalsCard extends StatelessWidget {
               spacing: 26,
               runSpacing: 14,
               children: [
-                _Stat(label: 'Present', value: '${totals.presentDays}', color: AppTheme.present),
-                _Stat(label: 'Late', value: '${totals.lateDays}', color: AppTheme.late),
-                _Stat(label: 'Leave', value: '${totals.leaveDays}', color: AppTheme.leave),
-                _Stat(label: 'Absent', value: '${totals.absentDays}', color: AppTheme.absent),
+                _Stat(
+                  label: 'Present',
+                  value: '${totals.presentDays}',
+                  color: AppTheme.present,
+                ),
+                _Stat(
+                  label: 'Late',
+                  value: '${totals.lateDays}',
+                  color: AppTheme.late,
+                ),
+                _Stat(
+                  label: 'Leave',
+                  value: '${totals.leaveDays}',
+                  color: AppTheme.leave,
+                ),
+                _Stat(
+                  label: 'Absent',
+                  value: '${totals.absentDays}',
+                  color: AppTheme.absent,
+                ),
                 _Stat(
                   label: 'Worked',
                   value: Fmt.duration(totals.workedMinutes),
@@ -256,21 +286,30 @@ class _DayRow extends StatelessWidget {
             ),
             child: Text(
               label,
-              style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: color,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           if (day.late) ...[
             const SizedBox(width: 6),
-            const Text('late', style: TextStyle(color: AppTheme.late, fontSize: 11.5)),
+            const Text(
+              'late',
+              style: TextStyle(color: AppTheme.late, fontSize: 11.5),
+            ),
           ],
         ],
       ),
       subtitle: day.holiday != null
           ? Text(day.holiday!)
           : (day.firstIn != null
-              ? Text('In ${_clock(day.firstIn!)}'
-                  '${day.lastOut != null ? ' · Out ${_clock(day.lastOut!)}' : ' · still open'}')
-              : null),
+                ? Text(
+                    'In ${_clock(day.firstIn!)}'
+                    '${day.lastOut != null ? ' · Out ${_clock(day.lastOut!)}' : ' · still open'}',
+                  )
+                : null),
       trailing: day.workedMinutes > 0
           ? Text(
               Fmt.duration(day.workedMinutes),

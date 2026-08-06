@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:attendance/core/api_client.dart';
+import 'package:attendance/core/location.dart';
 import 'package:attendance/core/models.dart';
 import 'package:attendance/core/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -174,4 +177,96 @@ void main() {
       }
     });
   });
+
+  // Location is a record, not a gate. Every test here is really the same
+  // assertion from a different angle: whatever goes wrong with the sensor, the
+  // punch still gets sent.
+  group('PunchLocator', () {
+    test('sends both coordinates when there is a fix', () async {
+      const locator = PunchLocator(
+        source: _FakeLocationSource(
+          Coordinates(latitude: 40.7128, longitude: -74.006),
+        ),
+      );
+
+      expect(await locator.punchBody(), {
+        'latitude': 40.7128,
+        'longitude': -74.006,
+      });
+    });
+
+    test('sends an empty body when there is no fix', () async {
+      const locator = PunchLocator(source: NoLocationSource());
+
+      // Not {'latitude': null} — the endpoint validates these as numeric when
+      // present, so a null would fail the punch rather than read as "unknown".
+      expect(await locator.punchBody(), isEmpty);
+    });
+
+    test('swallows a source that throws', () async {
+      const locator = PunchLocator(source: _ThrowingLocationSource());
+
+      expect(await locator.resolve(), isNull);
+      expect(await locator.punchBody(), isEmpty);
+    });
+
+    test('gives up on a source that hangs', () async {
+      const locator = PunchLocator(
+        source: _HangingLocationSource(),
+        deadline: Duration(milliseconds: 50),
+      );
+
+      // The real case: indoors, permission granted, no fix ever arrives. The
+      // button must not sit under a spinner waiting for it.
+      expect(await locator.resolve(), isNull);
+    });
+
+    test('drops a fix the server would reject', () async {
+      // 91° does not exist. The server validates −90…90 and fails the whole
+      // punch on a bad value, so a broken sensor must cost the coordinates
+      // rather than the clock-in.
+      const locator = PunchLocator(
+        source: _FakeLocationSource(
+          Coordinates(latitude: 91, longitude: -74.006),
+        ),
+      );
+
+      expect(await locator.punchBody(), isEmpty);
+    });
+
+    test('treats NaN as no fix', () async {
+      const locator = PunchLocator(
+        source: _FakeLocationSource(
+          Coordinates(latitude: double.nan, longitude: double.nan),
+        ),
+      );
+
+      expect(await locator.punchBody(), isEmpty);
+    });
+  });
+}
+
+class _FakeLocationSource implements LocationSource {
+  const _FakeLocationSource(this.fix);
+
+  final Coordinates fix;
+
+  @override
+  Future<Coordinates?> currentPosition() async =>
+      fix.isPlausible ? fix : null;
+}
+
+class _ThrowingLocationSource implements LocationSource {
+  const _ThrowingLocationSource();
+
+  @override
+  Future<Coordinates?> currentPosition() async =>
+      throw Exception('permission channel blew up');
+}
+
+class _HangingLocationSource implements LocationSource {
+  const _HangingLocationSource();
+
+  @override
+  Future<Coordinates?> currentPosition() => Completer<Coordinates?>().future;
 }

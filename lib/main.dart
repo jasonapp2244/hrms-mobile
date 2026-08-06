@@ -1,17 +1,33 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'core/api_client.dart';
+import 'core/push.dart';
 import 'core/session.dart';
 import 'core/theme.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 
-void main() {
+Future<void> main() async {
   // Before anything renders: a release build pointed at the development server
   // is a build mistake, and it fails as a hang rather than as an error.
   ApiClient.assertSecureBaseUrl();
 
-  runApp(const HrmsApp());
+  // Required before any plugin is touched, and Firebase is touched below.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Resolves to a provider that receives nothing when this build has no
+  // Firebase credentials — which is every build until somebody has done the
+  // console work in Push-Notifications_Setup.md. The app is fully usable in
+  // that state; it simply gets no notifications.
+  //
+  // There is deliberately no `onBackgroundMessage` handler. The server sends a
+  // `notification` block with every push (FcmClient), so the OS draws the
+  // notification itself while the app is backgrounded or dead, and a Dart
+  // isolate woken for each message would do nothing but cost battery.
+  final push = await FirebasePushProvider.connect(() => Firebase.initializeApp());
+
+  runApp(HrmsApp(pushProvider: push));
 }
 
 /// Makes the [Session] reachable from any screen without threading it through
@@ -35,14 +51,18 @@ class SessionScope extends InheritedNotifier<Session> {
 }
 
 class HrmsApp extends StatefulWidget {
-  const HrmsApp({super.key});
+  const HrmsApp({super.key, this.pushProvider = const DisabledPushProvider()});
+
+  /// How this build receives notifications. Injected from [main] so that a
+  /// widget test can drive the app without a Firebase project.
+  final PushProvider pushProvider;
 
   @override
   State<HrmsApp> createState() => _HrmsAppState();
 }
 
 class _HrmsAppState extends State<HrmsApp> {
-  final Session _session = Session();
+  late final Session _session = Session(pushProvider: widget.pushProvider);
 
   @override
   void initState() {
