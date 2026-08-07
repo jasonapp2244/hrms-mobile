@@ -178,6 +178,72 @@ void main() {
     });
   });
 
+  // The team roster (B7.3). Parsing only — the endpoint decides the status
+  // vocabulary and the app must not reinterpret it.
+  group('TeamRosterMember', () {
+    Map<String, dynamic> payload() => {
+          'employee_id': 7,
+          'name': 'Emily Johnson',
+          'employee_code': 'EMP-0002',
+          'schedule': [
+            {
+              'date': '2026-08-03',
+              'status': 'working',
+              'holiday': null,
+              'shift': {
+                'name': 'Morning',
+                'start_time': '09:00:00',
+                'end_time': '17:00:00',
+              },
+              'is_rostered': true,
+            },
+            {
+              'date': '2026-08-04',
+              'status': 'leave',
+              'holiday': null,
+              'shift': null,
+              'is_rostered': false,
+            },
+          ],
+        };
+
+    test('reads a week for one person', () {
+      final member = TeamRosterMember.fromJson(payload());
+
+      expect(member.employeeId, 7);
+      expect(member.name, 'Emily Johnson');
+      expect(member.schedule, hasLength(2));
+    });
+
+    test('a working day carries its shift', () {
+      final day = TeamRosterMember.fromJson(payload()).schedule.first;
+
+      expect(day.isWorking, isTrue);
+      expect(day.isRostered, isTrue);
+      expect(day.shift?.name, 'Morning');
+    });
+
+    test('a leave day carries no shift', () {
+      // Showing the shift would have a manager expecting somebody who booked
+      // the day off after the roster was drawn.
+      final day = TeamRosterMember.fromJson(payload()).schedule[1];
+
+      expect(day.isWorking, isFalse);
+      expect(day.status, 'leave');
+      expect(day.shift, isNull);
+    });
+
+    test('an empty schedule is not an error', () {
+      final member = TeamRosterMember.fromJson({
+        'employee_id': 1,
+        'name': 'Nobody',
+        'employee_code': 'E1',
+      });
+
+      expect(member.schedule, isEmpty);
+    });
+  });
+
   // Location is a record, not a gate. Every test here is really the same
   // assertion from a different angle: whatever goes wrong with the sensor, the
   // punch still gets sent.

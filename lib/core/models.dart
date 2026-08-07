@@ -600,3 +600,66 @@ class TeamMember {
             : null,
       );
 }
+
+/// One person's rostered week, as `/team/roster` returns it (B7.3).
+///
+/// Employee-major to match the endpoint: a manager reads down a person to see
+/// their week. The across-a-day view is what the "In today" tab already gives.
+class TeamRosterMember {
+  TeamRosterMember({
+    required this.employeeId,
+    required this.name,
+    required this.employeeCode,
+    required this.schedule,
+  });
+
+  final int employeeId;
+  final String name;
+  final String employeeCode;
+  final List<TeamRosterDay> schedule;
+
+  factory TeamRosterMember.fromJson(Map<String, dynamic> j) => TeamRosterMember(
+        employeeId: _toInt(j['employee_id']),
+        name: '${j['name'] ?? ''}',
+        employeeCode: '${j['employee_code'] ?? ''}',
+        schedule: ((j['schedule'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(TeamRosterDay.fromJson)
+            .toList(),
+      );
+}
+
+class TeamRosterDay {
+  TeamRosterDay({
+    required this.date,
+    required this.status,
+    required this.isRostered,
+    this.shift,
+    this.holiday,
+  });
+
+  final String date;
+
+  /// One of working, leave, holiday, day_off, weekend.
+  final String status;
+
+  /// A day explicitly placed on the roster, as opposed to one falling back to
+  /// the person's standing shift. Both are "working"; only the first was a
+  /// decision somebody made.
+  final bool isRostered;
+
+  final ShiftInfo? shift;
+  final String? holiday;
+
+  bool get isWorking => status == 'working';
+
+  factory TeamRosterDay.fromJson(Map<String, dynamic> j) => TeamRosterDay(
+        date: '${j['date'] ?? ''}',
+        status: '${j['status'] ?? ''}',
+        isRostered: j['is_rostered'] == true,
+        shift: j['shift'] is Map<String, dynamic>
+            ? ShiftInfo.fromJson(j['shift'] as Map<String, dynamic>)
+            : null,
+        holiday: _str(j['holiday']),
+      );
+}

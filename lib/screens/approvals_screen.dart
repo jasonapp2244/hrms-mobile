@@ -23,7 +23,7 @@ class ApprovalsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My team'),
@@ -31,6 +31,7 @@ class ApprovalsScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Approvals'),
               Tab(text: 'In today'),
+              Tab(text: 'Roster'),
             ],
           ),
         ),
@@ -38,6 +39,7 @@ class ApprovalsScreen extends StatelessWidget {
           children: [
             _ApprovalsTab(visible: visible),
             _TeamTab(visible: visible),
+            _TeamRosterTab(visible: visible),
           ],
         ),
       ),
@@ -465,6 +467,261 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Team roster (B7.3)
+// ---------------------------------------------------------------------------
+
+/// The week ahead for each direct report.
+///
+/// Published days only — the endpoint enforces that, and it matters: telling a
+/// manager somebody is on Tuesday when the roster is still a draft is how
+/// people get told to come in on a day that then changes.
+class _TeamRosterTab extends StatefulWidget {
+  const _TeamRosterTab({required this.visible});
+
+  final ValueListenable<bool> visible;
+
+  @override
+  State<_TeamRosterTab> createState() => _TeamRosterTabState();
+}
+
+class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
+  List<TeamRosterMember> _team = const [];
+  bool _loading = true;
+  String? _error;
+
+  /// How far ahead the window starts, in whole weeks from today.
+  int _weekOffset = 0;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    setState(() {
+      _loading = !silent;
+      _error = null;
+    });
+
+    // Dates are built here rather than sent as an offset: the server takes a
+    // concrete day, and a device whose clock is a day out should show its own
+    // idea of "this week" rather than silently disagree with the header.
+    final start = DateTime.now().add(Duration(days: 7 * _weekOffset));
+    final from = '${start.year.toString().padLeft(4, '0')}-'
+        '${start.month.toString().padLeft(2, '0')}-'
+        '${start.day.toString().padLeft(2, '0')}';
+
+    try {
+      final res = await SessionScope.read(context)
+          .api
+          .get('/team/roster?from=$from&days=7');
+      if (!mounted) return;
+      setState(() {
+        _team = ((res['team'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(TeamRosterMember.fromJson)
+            .toList();
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.displayMessage;
+        _loading = false;
+      });
+    }
+  }
+
+  void _shift(int weeks) {
+    setState(() => _weekOffset += weeks);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AsyncView(
+      loading: _loading,
+      error: _error,
+      onRetry: _load,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: () => _shift(-1),
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: 'Previous week',
+                ),
+                Text(
+                  _weekOffset == 0
+                      ? 'This week'
+                      : _weekOffset == 1
+                          ? 'Next week'
+                          : _weekOffset == -1
+                              ? 'Last week'
+                              : '${_weekOffset.abs()} weeks '
+                                  '${_weekOffset > 0 ? 'ahead' : 'back'}',
+                  style: theme.textTheme.titleSmall,
+                ),
+                IconButton(
+                  onPressed: () => _shift(1),
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: 'Next week',
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _team.isEmpty
+                  ? ListView(
+                      children: const [
+                        SizedBox(height: 80),
+                        EmptyState(
+                          icon: Icons.event_busy_outlined,
+                          title: 'Nobody reports to you',
+                          subtitle:
+                              'The full roster lives in the web dashboard.',
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                      children: [
+                        for (final member in _team) ...[
+                          _TeamRosterCard(member: member),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamRosterCard extends StatelessWidget {
+  const _TeamRosterCard({required this.member});
+
+  final TeamRosterMember member;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final working = member.schedule.where((d) => d.isWorking).length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    member.name,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  '$working day${working == 1 ? '' : 's'} on',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 18),
+            for (final day in member.schedule) _TeamRosterDayRow(day: day),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamRosterDayRow extends StatelessWidget {
+  const _TeamRosterDayRow({required this.day});
+
+  final TeamRosterDay day;
+
+  @override
+  Widget build(BuildContext context) {
+    // Same vocabulary and the same ordering as the employee's own schedule
+    // screen: leave and holidays outrank the shift, because they are why
+    // nobody is working it.
+    final (label, color) = switch (day.status) {
+      'leave' => ('On leave', AppTheme.leave),
+      'holiday' => (day.holiday ?? 'Holiday', AppTheme.neutral),
+      'day_off' => ('Day off', AppTheme.neutral),
+      'weekend' => ('Weekend', AppTheme.neutral),
+      _ => (day.shift?.window ?? 'No shift', AppTheme.present),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 58,
+            child: Text(
+              Fmt.shortDate(day.date),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          if (day.isRostered)
+            // A day somebody deliberately placed, as opposed to the standing
+            // shift filling in. One is a decision, the other a default.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.brand.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'rostered',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppTheme.brandDeep,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
