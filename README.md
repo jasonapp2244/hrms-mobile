@@ -24,7 +24,7 @@ flutter run -d emulator-5554
 Against a real device or a deployed server, override the base URL:
 
 ```bash
-flutter run --dart-define=API_BASE=https://hr.example.com/api/v1
+flutter run --dart-define=API_BASE=https://emp.klutchcleaning.com/api/v1
 ```
 
 ## Tests
