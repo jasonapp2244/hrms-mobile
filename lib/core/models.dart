@@ -182,6 +182,57 @@ class Punch {
       );
 }
 
+/// A document HR has filed against this employee (B3.7).
+///
+/// Read-only from the app's side. `notes` and the uploader are not in the
+/// payload at all — notes is where HR records why something is being chased,
+/// and the employee is the subject of that commentary rather than its reader.
+class EmployeeDocument {
+  EmployeeDocument({
+    required this.id,
+    required this.type,
+    required this.typeLabel,
+    required this.title,
+    required this.originalName,
+    required this.sizeLabel,
+    required this.expiryState,
+    this.mimeType,
+    this.issuedOn,
+    this.expiresOn,
+  });
+
+  final int id;
+  final String type;
+  final String typeLabel;
+  final String title;
+  final String originalName;
+  final String sizeLabel;
+
+  /// `none`, `valid`, `soon` or `expired` — the same four the web badge uses,
+  /// so one document cannot read as expiring on a phone and fine on a desk.
+  final String expiryState;
+
+  final String? mimeType;
+  final String? issuedOn;
+  final String? expiresOn;
+
+  bool get hasExpired => expiryState == 'expired';
+  bool get expiresSoon => expiryState == 'soon';
+
+  factory EmployeeDocument.fromJson(Map<String, dynamic> j) => EmployeeDocument(
+        id: _toInt(j['id']),
+        type: '${j['type'] ?? ''}',
+        typeLabel: '${j['type_label'] ?? j['type'] ?? 'Document'}',
+        title: '${j['title'] ?? ''}',
+        originalName: '${j['original_name'] ?? ''}',
+        sizeLabel: '${j['size_label'] ?? ''}',
+        expiryState: '${j['expiry_state'] ?? 'none'}',
+        mimeType: _str(j['mime_type']),
+        issuedOn: _str(j['issued_on']),
+        expiresOn: _str(j['expires_on']),
+      );
+}
+
 class ShiftInfo {
   ShiftInfo({
     required this.name,

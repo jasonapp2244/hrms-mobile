@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api_client.dart';
 import '../core/theme.dart';
 import '../main.dart';
+import 'documents_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -117,6 +118,18 @@ class ProfileScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 24),
 
+          // Only for somebody who has a record to hold documents against. An
+          // admin login would 403 the moment the screen opened.
+          if (user.hasEmployeeRecord) ...[
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const DocumentsScreen()),
+              ),
+              icon: const Icon(Icons.folder_outlined),
+              label: const Text('My documents'),
+            ),
+            const SizedBox(height: 10),
+          ],
           OutlinedButton.icon(
             onPressed: () => _editProfile(context),
             icon: const Icon(Icons.edit_outlined),

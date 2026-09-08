@@ -206,6 +206,54 @@ void main() {
     });
   });
 
+  group('EmployeeDocument', () {
+    Map<String, dynamic> json({String state = 'none', String? expires}) => {
+          'id': 12,
+          'type': 'right_to_work',
+          'type_label': 'Right to Work / Visa',
+          'title': 'Work visa',
+          'original_name': 'visa-2026.pdf',
+          'mime_type': 'application/pdf',
+          'size_bytes': 184320,
+          'size_label': '180 KB',
+          'expiry_state': state,
+          'expires_on': expires,
+        };
+
+    test('reads what the list shows', () {
+      final doc = EmployeeDocument.fromJson(json(state: 'soon', expires: '2026-10-01'));
+
+      expect(doc.id, 12);
+      expect(doc.typeLabel, 'Right to Work / Visa');
+      expect(doc.title, 'Work visa');
+      expect(doc.sizeLabel, '180 KB');
+      expect(doc.expiresOn, '2026-10-01');
+    });
+
+    test('the four expiry states line up with the web badge', () {
+      expect(EmployeeDocument.fromJson(json(state: 'expired')).hasExpired, isTrue);
+      expect(EmployeeDocument.fromJson(json(state: 'soon')).expiresSoon, isTrue);
+
+      final valid = EmployeeDocument.fromJson(json(state: 'valid'));
+      expect(valid.hasExpired, isFalse);
+      expect(valid.expiresSoon, isFalse);
+
+      final undated = EmployeeDocument.fromJson(json());
+      expect(undated.hasExpired, isFalse);
+      expect(undated.expiresSoon, isFalse);
+      expect(undated.expiresOn, isNull);
+    });
+
+    test('falls back to the raw type when the server sends no label', () {
+      final doc = EmployeeDocument.fromJson({'id': 1, 'type': 'contract'});
+
+      expect(doc.typeLabel, 'contract');
+      // Absent rather than wrong: an older server omitting expiry_state must
+      // not have its documents drawn as expired.
+      expect(doc.expiryState, 'none');
+    });
+  });
+
   group('Fmt', () {
     test('renders whole and half days correctly', () {
       expect(Fmt.days(1), '1 day');

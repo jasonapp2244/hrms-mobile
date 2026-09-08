@@ -162,6 +162,76 @@ class ApiClient {
             body: jsonEncode(body ?? const {}),
           ));
 
+  /// Fetch a file rather than JSON.
+  ///
+  /// `GET /documents/{id}` is the one endpoint whose success body is not JSON —
+  /// it is the document. Failures still are, so this decodes only when the
+  /// status says something went wrong, and hands back the bytes otherwise.
+  ///
+  /// Deliberately not routed through [_send]: that decodes every response, and
+  /// running a PDF through jsonDecode would report "not JSON" for a file that
+  /// arrived perfectly.
+  ///
+  /// Longer timeout than the JSON calls. Twenty seconds is generous for a
+  /// status payload and mean for a ten-megabyte contract over hotel wifi.
+  Future<({List<int> bytes, String? filename})> getFile(String path) async {
+    late final http.Response response;
+
+    try {
+      response = await _http
+          .get(Uri.parse('$baseUrl$path'), headers: _headers())
+          .timeout(const Duration(seconds: 90));
+    } on SocketException {
+      throw ApiException(
+        error: 'network_unreachable',
+        message: 'Cannot reach the server. Is it running, and bound to 0.0.0.0?',
+      );
+    } catch (e) {
+      throw ApiException(
+        error: 'network_error',
+        message: 'Network problem: $e',
+      );
+    }
+
+    if (response.statusCode >= 400) {
+      Map<String, dynamic> decoded = const {};
+      try {
+        final raw = jsonDecode(response.body);
+        if (raw is Map<String, dynamic>) decoded = raw;
+      } on FormatException {
+        // A failure that is not JSON either — a web-server error page.
+      }
+
+      throw ApiException(
+        error: '${decoded['error'] ?? 'download_failed'}',
+        message: '${decoded['message'] ?? 'That file could not be downloaded.'}',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return (
+      bytes: response.bodyBytes,
+      filename: _filenameFrom(response.headers['content-disposition']),
+    );
+  }
+
+  /// The name the server sent, from `Content-Disposition`.
+  ///
+  /// Best effort: the header is the server's word for what the file is called,
+  /// and the caller has the document's own `original_name` to fall back on.
+  static String? _filenameFrom(String? disposition) {
+    if (disposition == null) return null;
+
+    final match = RegExp(r'filename\*?=(?:UTF-8'
+            r"''"
+            r')?"?([^";]+)"?')
+        .firstMatch(disposition);
+
+    final name = match?.group(1)?.trim();
+
+    return (name == null || name.isEmpty) ? null : Uri.decodeComponent(name);
+  }
+
   Future<Map<String, dynamic>> _send(
     Future<http.Response> Function() request,
   ) async {
