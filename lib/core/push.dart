@@ -7,16 +7,26 @@ import 'api_client.dart';
 
 /// Where a tap on a notification should land.
 ///
-/// The server puts one of these three strings in the payload's `route` key —
-/// see `Push-Notifications_Setup.md` — precisely so the app never has to guess
-/// the destination by reading the message text. Text gets reworded; a key does
-/// not.
+/// The server puts one of these strings in the payload's `route` key — see
+/// `Push-Notifications_Setup.md` — precisely so the app never has to guess the
+/// destination by reading the message text. Text gets reworded; a key does not.
+///
+/// **This list is one half of a contract, and the other half is on the server.**
+/// A key the server sends and this enum has never heard of parses to null, so
+/// the notification still arrives and the tap merely opens the app on whatever
+/// tab it was last on. Nothing throws and nothing is logged, which is exactly
+/// how `schedule` went unnoticed: `ScheduleUpdated` had been sending it since
+/// A9.5 shipped, and every roster notification landed nowhere in particular.
+/// When a notification gains a route on the server, it needs a row here too.
 enum PushRoute {
   /// Still clocked in after the shift ended (`MissingCheckoutReminder`).
   clock('clock', 'Clock'),
 
   /// A decision reached the employee (`LeaveRequestDecided`).
   leave('leave', 'Leave'),
+
+  /// The published roster changed under them (`ScheduleUpdated`).
+  schedule('schedule', 'Schedule'),
 
   /// A request arrived for a manager (`LeaveRequestSubmitted`).
   approvals('approvals', 'Team');

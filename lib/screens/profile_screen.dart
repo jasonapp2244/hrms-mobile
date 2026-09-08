@@ -118,6 +118,12 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 24),
 
           OutlinedButton.icon(
+            onPressed: () => _editProfile(context),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('Edit contact details'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
             onPressed: () => _changePassword(context),
             icon: const Icon(Icons.lock_outline),
             label: const Text('Change password'),
@@ -211,6 +217,15 @@ class ProfileScreen extends StatelessWidget {
       builder: (_) => const _ChangePasswordSheet(),
     );
   }
+
+  Future<void> _editProfile(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _EditProfileSheet(),
+    );
+  }
 }
 
 /// A row that opens one of the server's public legal pages in the browser.
@@ -296,6 +311,205 @@ class _InfoCard extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Editing the contact details on the account (B3.2).
+///
+/// `PUT /profile` has existed since the API shipped and nothing ever called it,
+/// which is the whole of what was missing here.
+///
+/// **The sign-in address is shown but not editable.** The endpoint accepts a new
+/// `email`, and this screen deliberately declines to offer one: changing the
+/// address somebody signs in with is an account takeover in two steps — set it
+/// to your own, then use "forgot password" — and it would need nothing but an
+/// unlocked phone. Changing the *password* already demands the current one for
+/// exactly that reason. Until the endpoint asks for a password too, the address
+/// is read here and posted back unchanged, because the validator requires it.
+class _EditProfileSheet extends StatefulWidget {
+  const _EditProfileSheet();
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+
+  /// Read from the server and posted straight back. Never bound to a field.
+  String _email = '';
+
+  bool _loading = true;
+  bool _busy = false;
+  String? _error;
+  Map<String, String> _fieldErrors = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    super.dispose();
+  }
+
+  /// The current values come from `GET /profile`, not from the signed-in user:
+  /// `/auth/me` does not carry a phone, and prefilling a phone field with blank
+  /// would look like "we have no number for you" and invite somebody to retype
+  /// one they had already given.
+  Future<void> _load() async {
+    try {
+      final res = await SessionScope.read(context).api.get('/profile');
+      final account = (res['account'] as Map<String, dynamic>?) ?? const {};
+
+      if (!mounted) return;
+      setState(() {
+        _name.text = '${account['name'] ?? ''}';
+        _phone.text = '${account['phone'] ?? ''}';
+        _email = '${account['email'] ?? ''}';
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.displayMessage;
+      });
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _fieldErrors = const {};
+    });
+
+    final session = SessionScope.read(context);
+
+    try {
+      await session.api.put('/profile', body: {
+        'name': _name.text.trim(),
+        // Unchanged, and required by the validator. See the class comment.
+        'email': _email,
+        'phone': _phone.text.trim(),
+      });
+
+      // The name is on the header of this very screen and on every greeting,
+      // so the cached user has to catch up or the change looks like it failed.
+      await session.refreshUser();
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated.'),
+          backgroundColor: AppTheme.present,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _fieldErrors = {
+          for (final entry in e.fieldErrors.entries)
+            if (entry.value.isNotEmpty) entry.key: entry.value.first,
+        };
+        _error = _fieldErrors.isEmpty ? e.displayMessage : null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Edit contact details',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 20),
+            if (_error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+              )
+            else ...[
+              TextField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  errorText: _fieldErrors['name'],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'Phone',
+                  errorText: _fieldErrors['phone'],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                enabled: false,
+                controller: TextEditingController(text: _email),
+                decoration: const InputDecoration(
+                  labelText: 'Sign-in email',
+                  helperText: 'Ask HR to change the address you sign in with.',
+                  helperMaxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _busy ? null : _submit,
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.brand),
+                child: _busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                      )
+                    : const Text('Save'),
               ),
             ],
           ],

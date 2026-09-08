@@ -85,18 +85,46 @@ class RecordingApi {
 
 void main() {
   group('PushRoute', () {
-    test('maps the three values the server sends', () {
+    test('maps every value the server sends', () {
       // These strings are the contract with the server (Push-Notifications_
       // Setup.md). Changing one here without changing the notification classes
       // silently stops taps landing anywhere.
-      expect(PushRoute.parse('clock'), PushRoute.clock);
-      expect(PushRoute.parse('leave'), PushRoute.leave);
-      expect(PushRoute.parse('approvals'), PushRoute.approvals);
+      //
+      // This test used to assert three, which is why `schedule` was missing for
+      // so long: ScheduleUpdated::toFcm has sent it since A9.5, and a test that
+      // only checks the routes the app already knows can never notice one it
+      // does not. The list below is per *notification class* on the server, so
+      // adding one there means adding a line here.
+      expect(PushRoute.parse('clock'), PushRoute.clock); // MissingCheckoutReminder
+      expect(PushRoute.parse('leave'), PushRoute.leave); // LeaveRequestDecided
+      expect(PushRoute.parse('schedule'), PushRoute.schedule); // ScheduleUpdated
+      expect(PushRoute.parse('approvals'), PushRoute.approvals); // LeaveRequestSubmitted
     });
 
-    test('resolves each route to a tab that exists in the shell', () {
+    test('every route resolves to a tab that exists in the shell', () {
+      // Matched by label rather than index because the Team tab only exists for
+      // somebody with approve-leave, so position 4 is not the same screen for
+      // everybody. A label that does not exist sends the tap nowhere.
+      const shellTabs = <String>{
+        'Clock',
+        'History',
+        'Leave',
+        'Schedule',
+        'Team',
+        'Profile',
+      };
+
+      for (final route in PushRoute.values) {
+        expect(
+          shellTabs,
+          contains(route.tabLabel),
+          reason: 'PushRoute.${route.name} points at a tab HomeShell does not build.',
+        );
+      }
+
       expect(PushRoute.clock.tabLabel, 'Clock');
       expect(PushRoute.leave.tabLabel, 'Leave');
+      expect(PushRoute.schedule.tabLabel, 'Schedule');
       expect(PushRoute.approvals.tabLabel, 'Team');
     });
 
