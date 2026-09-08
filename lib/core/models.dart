@@ -91,10 +91,26 @@ class AppUser {
   /// employee-scoped endpoint, so the UI has to check this rather than assume.
   final EmployeeRef? employee;
 
-  /// The gate for the whole manager section. The reference is explicit: show it
-  /// only when the permission is present, because the endpoints behind it are
-  /// permission-gated *and* scoped to direct reports.
+  /// Holds the permission the manager endpoints are gated on.
+  ///
+  /// Not sufficient on its own to show the Team tab — see [leadsATeam]. **HR
+  /// holds this too**, because HR is the second step of the approval chain on
+  /// the web.
   bool get canApproveLeave => permissions.contains('approve-leave');
+
+  /// The gate for the Team tab: the permission **and** somebody to use it on.
+  ///
+  /// "manager is a role *and* a relationship, and both must line up" — the
+  /// permission opens the endpoints, `employees.manager_id` decides whose
+  /// records they return. The tab used to hang off the permission alone, which
+  /// gave a Team tab to every HR user and to any manager with nobody reporting
+  /// to them; every screen behind it then came back empty, for ever, with
+  /// nothing on it explaining why.
+  ///
+  /// On the web the two never met, because `/manager/*` is gated `role:manager`
+  /// as well and refuses HR at the door. The app had no equivalent, so it
+  /// advertised an area that could not do anything.
+  bool get leadsATeam => canApproveLeave && employee?.isManager == true;
 
   bool get hasEmployeeRecord => employee != null;
 

@@ -192,7 +192,7 @@ class _HomeShellState extends State<HomeShell> {
           visible: _flagFor('Schedule', visible: _index == 3),
         ),
       ),
-      if (user?.canApproveLeave == true)
+      if (user?.leadsATeam == true)
         _Tab(
           icon: Icons.groups_outlined,
           selectedIcon: Icons.groups,

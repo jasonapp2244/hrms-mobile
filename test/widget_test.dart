@@ -65,8 +65,55 @@ void main() {
       });
 
       expect(user.canApproveLeave, isTrue);
+      expect(user.leadsATeam, isTrue);
       expect(user.hasEmployeeRecord, isTrue);
       expect(user.initials, 'JS');
+    });
+
+    test('HR holds approve-leave and still gets no Team tab', () {
+      // HR is the second step of the approval chain, so it carries the
+      // permission the manager endpoints are gated on. It almost never has
+      // anybody reporting to it, and those endpoints are scoped to direct
+      // reports — so the tab used to appear and every screen behind it came
+      // back empty for ever. The web never had this: /manager/* is gated
+      // role:manager as well and refuses HR at the door.
+      final hr = AppUser.fromJson({
+        'id': 4,
+        'name': 'Dana HR',
+        'email': 'dana@acme.test',
+        'roles': ['hr'],
+        'permissions': ['approve-leave', 'view-team', 'manage-employees'],
+        'employee': {
+          'id': 2,
+          'employee_code': 'EMP-0002',
+          'full_name': 'Dana HR',
+          'is_manager': false,
+        },
+      });
+
+      expect(hr.canApproveLeave, isTrue);
+      expect(hr.leadsATeam, isFalse);
+    });
+
+    test('a manager role with nobody reporting gets no Team tab either', () {
+      // The role grants the gate; manager_id decides the scope. Both have to
+      // line up, and on a phone a permanently empty tab is worse than none.
+      final lonely = AppUser.fromJson({
+        'id': 5,
+        'name': 'Mia Lead',
+        'email': 'mia@acme.test',
+        'roles': ['employee', 'manager'],
+        'permissions': ['view-attendance', 'approve-leave'],
+        'employee': {
+          'id': 3,
+          'employee_code': 'EMP-0003',
+          'full_name': 'Mia Lead',
+          'is_manager': false,
+        },
+      });
+
+      expect(lonely.canApproveLeave, isTrue);
+      expect(lonely.leadsATeam, isFalse);
     });
 
     test('an admin login with no employee record is still a valid user', () {
@@ -83,6 +130,8 @@ void main() {
 
       expect(user.hasEmployeeRecord, isFalse);
       expect(user.canApproveLeave, isFalse);
+      // No employee record means no reporting line either, so nothing to lead.
+      expect(user.leadsATeam, isFalse);
     });
   });
 
