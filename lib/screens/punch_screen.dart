@@ -26,6 +26,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   TodayStatus? _today;
   bool _loading = true;
   bool _punching = false;
+  bool _breaking = false;
   String? _error;
 
   /// Drives the live "worked so far" figure. The server sends worked_minutes at
@@ -138,6 +139,46 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     }
   }
 
+  /// Start or end a break (B2.6).
+  ///
+  /// A separate endpoint from the punch, and separate state here, because the
+  /// two refuse for different reasons: a break is refused when the day is not
+  /// in a state for one, a punch never is. `break_not_available` means the
+  /// screen is out of date, so it reloads rather than blaming the person.
+  Future<void> _break() async {
+    if (_breaking) return;
+    setState(() => _breaking = true);
+
+    try {
+      final session = SessionScope.read(context);
+
+      final res = await session.api.post(
+        '/attendance/break',
+        body: await session.locator.punchBody(),
+      );
+
+      if (!mounted) return;
+      _showResult('${res['message']}', AppTheme.neutral);
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      if (e.isDuplicateScan) {
+        _showResult('That is already recorded.', AppTheme.neutral);
+        await _load();
+      } else if (e.error == 'break_not_available') {
+        // The day moved on under the screen — clocked out on another device,
+        // most likely. Refreshing answers it better than any message would.
+        _showResult(e.displayMessage, AppTheme.late);
+        await _load();
+      } else {
+        _showResult(e.displayMessage, Theme.of(context).colorScheme.error);
+      }
+    } finally {
+      if (mounted) setState(() => _breaking = false);
+    }
+  }
+
   void _showResult(String message, Color color) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -183,6 +224,16 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
                   busy: _punching,
                   onPressed: _today!.canCheck ? _punch : null,
                 ),
+                // Only on the clock. Off the clock there is no break to take,
+                // and the server would refuse it — so there is nothing to show.
+                if (_today!.isClockedIn) ...[
+                  const SizedBox(height: 12),
+                  _BreakButton(
+                    today: _today!,
+                    busy: _breaking,
+                    onPressed: _today!.canBreak ? _break : null,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 _DayNotes(today: _today!),
                 if (_today!.punches.isNotEmpty) ...[
@@ -221,13 +272,20 @@ class _StatusCard extends StatelessWidget {
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: clockedIn ? AppTheme.present : AppTheme.neutral,
+                    color: today.onBreak
+                        ? AppTheme.late
+                        : (clockedIn ? AppTheme.present : AppTheme.neutral),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  clockedIn ? 'Clocked in' : 'Not clocked in',
+                  // On a break is a third state, not a fourth word for clocked
+                  // out. The clock is still running on the day; it is the paid
+                  // total below that has paused.
+                  today.onBreak
+                      ? 'On a break'
+                      : (clockedIn ? 'Clocked in' : 'Not clocked in'),
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -352,6 +410,50 @@ class _PunchButton extends StatelessWidget {
   }
 }
 
+/// The break button (B2.6).
+///
+/// Outlined rather than filled, and half the height of the punch button. The
+/// clock in/out button is the one thing this screen is for; a break is a
+/// secondary action and giving it equal weight would invite mis-taps on the
+/// one control that matters.
+class _BreakButton extends StatelessWidget {
+  const _BreakButton({required this.today, required this.busy, this.onPressed});
+
+  final TodayStatus today;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final starting = today.willStartBreak;
+
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: busy ? null : onPressed,
+        icon: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : Icon(starting ? Icons.free_breakfast_outlined : Icons.play_arrow),
+        label: Text(
+          starting ? 'Start break' : 'End break',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        style: OutlinedButton.styleFrom(
+          // On a break the control that ends it is the live one, so it gets the
+          // colour. Starting one is unremarkable and stays quiet.
+          foregroundColor: starting ? null : AppTheme.brandDeep,
+          side: starting ? null : const BorderSide(color: AppTheme.brandDeep, width: 1.6),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+    );
+  }
+}
+
 /// Holiday, leave and day-off notes. None of them disable the button:
 /// somebody who books a day off and comes in anyway worked, and the record has
 /// to say so.
@@ -439,14 +541,22 @@ class _PunchList extends StatelessWidget {
               for (var i = 0; i < punches.length; i++) ...[
                 if (i > 0) const Divider(height: 1),
                 ListTile(
+                  // Four types, not two. A ternary on isIn would label a
+                  // break_start "Checked out" — the same mistake the server
+                  // made in /attendance/today before B2.6.
                   leading: Icon(
-                    punches[i].isIn ? Icons.login : Icons.logout,
-                    color: punches[i].isIn
-                        ? AppTheme.present
-                        : AppTheme.neutral,
+                    switch (punches[i].type) {
+                      'in' => Icons.login,
+                      'out' => Icons.logout,
+                      'break_start' => Icons.free_breakfast_outlined,
+                      _ => Icons.play_arrow,
+                    },
+                    color: punches[i].isBreak
+                        ? AppTheme.late
+                        : (punches[i].isIn ? AppTheme.present : AppTheme.neutral),
                   ),
                   title: Text(
-                    punches[i].isIn ? 'Checked in' : 'Checked out',
+                    punches[i].label,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: punches[i].office != null

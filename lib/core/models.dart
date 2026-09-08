@@ -140,11 +140,18 @@ class Punch {
 
   final int id;
 
-  /// `in` or `out` — decided by the server from what is already on record, not
-  /// by the app. A stale screen therefore cannot post the wrong direction.
+  /// `in`, `out`, `break_start` or `break_end` — decided by the server from what
+  /// is already on record, not by the app. A stale screen therefore cannot post
+  /// the wrong direction.
+  ///
+  /// **There are four of these, not two.** Anything that branches on `isIn`
+  /// alone reads a break as a departure; the server made exactly that mistake
+  /// in `/attendance/today` and offered "Check In" to somebody who had never
+  /// left. Use [label] rather than a ternary.
   final String type;
 
   /// `ontime`, `late` or `early_leave`, measured against the rostered shift.
+  /// Always `ontime` on a break — there is nothing to judge one against.
   final String status;
 
   /// Pre-formatted by the server in the company timezone, e.g. "04:57 PM".
@@ -153,6 +160,17 @@ class Punch {
   final String? source;
 
   bool get isIn => type == 'in';
+  bool get isBreak => type == 'break_start' || type == 'break_end';
+
+  /// What this punch is called on screen. One definition, so a break cannot be
+  /// worded two ways on two lists.
+  String get label => switch (type) {
+        'in' => 'Checked in',
+        'out' => 'Checked out',
+        'break_start' => 'Break started',
+        'break_end' => 'Back from break',
+        _ => type,
+      };
 
   factory Punch.fromJson(Map<String, dynamic> j) => Punch(
         id: _toInt(j['id']),
@@ -211,6 +229,10 @@ class TodayStatus {
     required this.isDayOff,
     this.holiday,
     this.leave,
+    this.onBreak = false,
+    this.canBreak = false,
+    this.nextBreakAction = 'start',
+    this.breakStartedAt,
   });
 
   /// The day a punch made *now* counts against. On a shift crossing midnight
@@ -236,7 +258,24 @@ class TodayStatus {
   /// came in anyway worked, and the record has to say so.
   final String? leave;
 
+  /// Currently on a break. `isClockedIn` stays true throughout — the person has
+  /// not gone home, and `workedMinutes` has already had the break taken off.
+  final bool onBreak;
+
+  /// True only on the clock and outside the cooldown. `recordBreak` refuses a
+  /// break in any other state, so grey the button rather than let the tap fail.
+  final bool canBreak;
+
+  /// `start` or `end` — what the break button should say. Kept apart from
+  /// [nextAction], which belongs to the in/out button: one screen carries both
+  /// and they move independently.
+  final String nextBreakAction;
+
+  /// Set only while [onBreak]. ISO 8601 with the company's offset.
+  final String? breakStartedAt;
+
   bool get willClockIn => nextAction == 'in';
+  bool get willStartBreak => nextBreakAction == 'start';
 
   factory TodayStatus.fromJson(Map<String, dynamic> j) => TodayStatus(
         date: '${j['date'] ?? ''}',
@@ -255,6 +294,12 @@ class TodayStatus {
         isDayOff: j['is_day_off'] == true,
         holiday: _str(j['holiday']),
         leave: _str(j['leave']),
+        onBreak: j['on_break'] == true,
+        // Defaults to false, not true: a build talking to a server from before
+        // the break endpoint existed gets no button rather than one that 404s.
+        canBreak: j['can_break'] == true,
+        nextBreakAction: '${j['next_break_action'] ?? 'start'}',
+        breakStartedAt: _str(j['break_started_at']),
       );
 }
 

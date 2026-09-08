@@ -139,6 +139,71 @@ void main() {
       expect(today.leave, 'Annual Leave');
       expect(today.canCheck, isTrue);
     });
+
+    test('a break does not read as having gone home', () {
+      // The bug this endpoint would otherwise have caused, in model form:
+      // break_end is neither in nor out, and anything reading the last punch
+      // treats a returning employee as one who left.
+      final today = TodayStatus.fromJson({
+        'date': '2026-08-04',
+        'next_action': 'out',
+        'is_clocked_in': true,
+        'on_break': true,
+        'can_break': true,
+        'next_break_action': 'end',
+        'break_started_at': '2026-08-04T13:00:00+00:00',
+      });
+
+      expect(today.isClockedIn, isTrue);
+      expect(today.willClockIn, isFalse);
+      expect(today.onBreak, isTrue);
+      expect(today.willStartBreak, isFalse);
+      expect(today.breakStartedAt, '2026-08-04T13:00:00+00:00');
+    });
+
+    test('an older server offering no break keys gets no break button', () {
+      // can_break defaults to false, not true: a build talking to a server from
+      // before B2.6 must show no button rather than one that 404s.
+      final today = TodayStatus.fromJson({'date': '2026-08-04', 'next_action': 'out'});
+
+      expect(today.canBreak, isFalse);
+      expect(today.onBreak, isFalse);
+      expect(today.willStartBreak, isTrue);
+      expect(today.breakStartedAt, isNull);
+    });
+  });
+
+  group('Punch', () {
+    test('names all four types, not two', () {
+      String labelFor(String type) =>
+          Punch.fromJson({'id': 1, 'type': type, 'status': 'ontime', 'time': '09:00 AM'}).label;
+
+      expect(labelFor('in'), 'Checked in');
+      expect(labelFor('out'), 'Checked out');
+      expect(labelFor('break_start'), 'Break started');
+      expect(labelFor('break_end'), 'Back from break');
+    });
+
+    test('a break is not a departure', () {
+      final breakEnd = Punch.fromJson(
+        {'id': 1, 'type': 'break_end', 'status': 'ontime', 'time': '01:30 PM'},
+      );
+
+      // isIn is false for a break_end, which is exactly why nothing may branch
+      // on it alone — that ternary would render this as "Checked out".
+      expect(breakEnd.isIn, isFalse);
+      expect(breakEnd.isBreak, isTrue);
+      expect(breakEnd.label, isNot('Checked out'));
+    });
+
+    test('an unknown type falls back to itself rather than lying', () {
+      final odd = Punch.fromJson(
+        {'id': 1, 'type': 'lunch', 'status': 'ontime', 'time': '12:00 PM'},
+      );
+
+      expect(odd.label, 'lunch');
+      expect(odd.isBreak, isFalse);
+    });
   });
 
   group('Fmt', () {
