@@ -255,6 +255,58 @@ void main() {
     });
   });
 
+  group('Regularisation', () {
+    test('tells a disputed punch from a missing one', () {
+      final disputed = Regularisation.fromJson({
+        'id': 7, 'type': 'in', 'work_date': '2026-08-03',
+        'requested_at': '2026-08-03T09:00:00+00:00', 'reason': 'Reader missed me',
+        'status': 'pending', 'challenges_a_punch': true,
+        'attendance_log_id': 109, 'can_cancel': true,
+      });
+
+      final missing = Regularisation.fromJson({
+        'id': 8, 'type': 'out', 'work_date': '2026-08-03',
+        'requested_at': '2026-08-03T18:00:00+00:00', 'reason': 'Forgot to check out',
+        'status': 'pending', 'challenges_a_punch': false,
+        'attendance_log_id': null, 'can_cancel': true,
+      });
+
+      expect(disputed.challengesAPunch, isTrue);
+      expect(disputed.attendanceLogId, 109);
+      expect(missing.challengesAPunch, isFalse);
+      expect(missing.attendanceLogId, isNull);
+      expect(disputed.summary, isNot(missing.summary));
+    });
+
+    test('a decided request cannot be withdrawn and names who decided it', () {
+      final decided = Regularisation.fromJson({
+        'id': 9, 'type': 'in', 'work_date': '2026-08-03',
+        'requested_at': '2026-08-03T09:00:00+00:00', 'reason': 'Reader missed me',
+        'status': 'rejected', 'challenges_a_punch': false, 'can_cancel': false,
+        'decision_note': 'The badge log disagrees.', 'decided_by': 'Dana HR',
+      });
+
+      expect(decided.isPending, isFalse);
+      expect(decided.canCancel, isFalse);
+      expect(decided.decidedBy, 'Dana HR');
+    });
+  });
+
+  group('DisputablePunch', () {
+    test('only in and out can be corrected', () {
+      DisputablePunch punch(String type) => DisputablePunch.fromJson({
+            'id': 1, 'type': type, 'work_date': '2026-08-03', 'time': '09:00 AM',
+          });
+
+      // recordManual has nothing to write for a break, and a break has no shift
+      // to be judged against — so offering one would be a form that always fails.
+      expect(punch('in').isCorrectable, isTrue);
+      expect(punch('out').isCorrectable, isTrue);
+      expect(punch('break_start').isCorrectable, isFalse);
+      expect(punch('break_end').isCorrectable, isFalse);
+    });
+  });
+
   group('EmployeeDocument', () {
     Map<String, dynamic> json({String state = 'none', String? expires}) => {
           'id': 12,
@@ -315,6 +367,20 @@ void main() {
       expect(Fmt.duration(45), '45m');
       expect(Fmt.duration(60), '1h');
       expect(Fmt.duration(434), '7h 14m');
+    });
+
+    test('reads a time in the company zone, not the handset one', () {
+      // The string already carries the company's offset. DateTime.parse would
+      // convert it to local time, so a punch made at 18:00 in New York would
+      // read as 23:00 to somebody whose phone is on London time.
+      expect(Fmt.timeOf('2026-08-03T18:00:00-04:00'), '06:00 PM');
+      expect(Fmt.timeOf('2026-08-03T09:05:00+05:00'), '09:05 AM');
+      expect(Fmt.timeOf('2026-08-03T00:30:00+00:00'), '12:30 AM');
+      expect(Fmt.timeOf('2026-08-03T12:00:00+00:00'), '12:00 PM');
+    });
+
+    test('a time it cannot parse comes back untouched rather than wrong', () {
+      expect(Fmt.timeOf('not a timestamp'), 'not a timestamp');
     });
 
     test('a single-day range does not repeat itself', () {

@@ -198,6 +198,118 @@ class Punch {
       );
 }
 
+/// A request to have the attendance record corrected (B3.9 / A4.13).
+///
+/// **Raising only from the app.** Deciding one voids a punch and writes a
+/// replacement, which is HR's and stays on the web — a manager has no step in
+/// this chain, unlike leave.
+class Regularisation {
+  Regularisation({
+    required this.id,
+    required this.type,
+    required this.workDate,
+    required this.requestedAt,
+    required this.reason,
+    required this.status,
+    required this.challengesAPunch,
+    required this.canCancel,
+    this.attendanceLogId,
+    this.decisionNote,
+    this.decidedBy,
+  });
+
+  final int id;
+
+  /// `in` or `out` — what the corrected punch should be. Breaks are not
+  /// correctable: there is no shift to judge one against.
+  final String type;
+
+  final String workDate;
+  final String requestedAt;
+  final String reason;
+
+  /// `pending`, `approved`, `rejected` or `cancelled`.
+  final String status;
+
+  /// True when this disputes an existing reading rather than reporting a
+  /// missing one. Sent by the server so the two are not worded differently in
+  /// two places.
+  final bool challengesAPunch;
+
+  final bool canCancel;
+  final int? attendanceLogId;
+  final String? decisionNote;
+
+  /// Recorded on the row at the moment of the decision, so it still reads
+  /// correctly after that HR account is deleted.
+  final String? decidedBy;
+
+  bool get isPending => status == 'pending';
+
+  String get typeLabel => type == 'in' ? 'Check in' : 'Check out';
+
+  String get summary => challengesAPunch
+      ? 'Disputing a $typeLabel'.toLowerCase()
+      : 'Missing $typeLabel'.toLowerCase();
+
+  factory Regularisation.fromJson(Map<String, dynamic> j) => Regularisation(
+        id: _toInt(j['id']),
+        type: '${j['type'] ?? ''}',
+        workDate: '${j['work_date'] ?? ''}',
+        requestedAt: '${j['requested_at'] ?? ''}',
+        reason: '${j['reason'] ?? ''}',
+        status: '${j['status'] ?? 'pending'}',
+        challengesAPunch: j['challenges_a_punch'] == true,
+        canCancel: j['can_cancel'] == true,
+        attendanceLogId: j['attendance_log_id'] is num
+            ? (j['attendance_log_id'] as num).toInt()
+            : null,
+        decisionNote: _str(j['decision_note']),
+        decidedBy: _str(j['decided_by']),
+      );
+}
+
+/// One of the caller's recent punches, offered for dispute.
+///
+/// Shipped with the regularisation list rather than fetched separately:
+/// `/attendance/history` answers in day-shaped rows and carries no punch ids,
+/// so without these the app cannot name the reading it is disputing.
+class DisputablePunch {
+  DisputablePunch({
+    required this.id,
+    required this.type,
+    required this.workDate,
+    required this.time,
+    this.office,
+  });
+
+  final int id;
+  final String type;
+  final String workDate;
+  final String time;
+  final String? office;
+
+  String get label => switch (type) {
+        'in' => 'Checked in',
+        'out' => 'Checked out',
+        'break_start' => 'Break started',
+        'break_end' => 'Back from break',
+        _ => type,
+      };
+
+  /// Only in and out can be corrected — `recordManual` has nothing to write for
+  /// a break, and a break has no shift to be judged against.
+  bool get isCorrectable => type == 'in' || type == 'out';
+
+  factory DisputablePunch.fromJson(Map<String, dynamic> j) => DisputablePunch(
+        id: _toInt(j['id']),
+        type: '${j['type'] ?? ''}',
+        workDate: '${j['work_date'] ?? ''}',
+        time: '${j['time'] ?? ''}',
+        office: _str(j['office']),
+      );
+}
+
 /// A document HR has filed against this employee (B3.7).
 ///
 /// Read-only from the app's side. `notes` and the uploader are not in the

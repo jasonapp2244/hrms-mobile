@@ -163,4 +163,24 @@ class Fmt {
   /// A date range where a single day does not read as "4 Aug – 4 Aug".
   static String range(String start, String end) =>
       start == end ? longDate(start) : '${shortDate(start)} – ${shortDate(end)}';
+
+  /// "2026-08-03T18:00:00-04:00" → "06:00 PM".
+  ///
+  /// Parsed **without** converting to the handset's zone. These timestamps
+  /// already carry the company's offset, and `DateTime.parse` on an offset
+  /// string yields a moment that `.hour` then reports in local time — so a
+  /// punch made at 18:00 in New York would read as 23:00 to somebody whose
+  /// phone is on London time. The wall-clock reading is the one that matters
+  /// here: it is the time the person was, or should have been, at work.
+  static String timeOf(String iso) {
+    final match = RegExp(r'T(\d{2}):(\d{2})').firstMatch(iso);
+    if (match == null) return iso;
+
+    final hour = int.tryParse(match.group(1)!) ?? 0;
+    final minute = match.group(2)!;
+    final suffix = hour < 12 ? 'AM' : 'PM';
+    final twelve = hour % 12 == 0 ? 12 : hour % 12;
+
+    return '${twelve.toString().padLeft(2, '0')}:$minute $suffix';
+  }
 }

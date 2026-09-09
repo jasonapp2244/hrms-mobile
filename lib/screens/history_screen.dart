@@ -7,6 +7,7 @@ import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import 'regularisations_screen.dart';
 
 /// One row per day, newest first — "did I make it in, and when" is a
 /// day-shaped question, so the API answers it in days rather than punches.
@@ -92,6 +93,15 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
       appBar: AppBar(
         title: const Text('History'),
         actions: [
+          // Next to the record it disputes, rather than on a tab of its own.
+          // Asking for a correction is rare and only makes sense here.
+          IconButton(
+            icon: const Icon(Icons.rule),
+            tooltip: 'Corrections',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const RegularisationsScreen()),
+            ),
+          ),
           PopupMenuButton<int>(
             initialValue: _rangeDays,
             tooltip: 'Date range',
