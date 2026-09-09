@@ -36,6 +36,16 @@ class ApiException implements Exception {
 
   bool get isRateLimited => error == 'too_many_requests';
 
+  /// The request never reached the server — no signal, a captive portal, or a
+  /// server that is down.
+  ///
+  /// The distinction that matters for B2.4: a punch that was *refused* is
+  /// settled and must not be queued, while one that never arrived is not the
+  /// person's fault and must not be lost. Set by the client itself in [_send],
+  /// so it never collides with a code the server could return.
+  bool get isNetworkFailure =>
+      error == 'network_unreachable' || error == 'network_error';
+
   /// First message for a given field, for showing under a form input.
   String? fieldError(String field) {
     final list = fieldErrors[field];

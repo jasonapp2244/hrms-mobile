@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_client.dart';
 import 'location.dart';
 import 'models.dart';
+import 'punch_queue.dart';
 import 'push.dart';
 
 /// Signed-in state for the whole app.
@@ -16,8 +17,10 @@ class Session extends ChangeNotifier {
     ApiClient? api,
     FlutterSecureStorage? storage,
     PunchLocator? locator,
+    PunchQueue? queue,
     PushProvider pushProvider = const DisabledPushProvider(),
   })  : api = api ?? ApiClient(),
+        queue = queue ?? PunchQueue(),
         // Defaults are correct on both platforms now: the plugin uses the
         // Keychain on iOS and its own ciphers on Android. The old
         // encryptedSharedPreferences flag is deprecated and ignored.
@@ -44,6 +47,14 @@ class Session extends ChangeNotifier {
   /// location plugin. It resolves to null there rather than failing, so a test
   /// that does not care about location does not have to stub one.
   final PunchLocator locator;
+
+  /// Punches made with no signal, waiting for one (B2.4).
+  ///
+  /// On the session rather than on the punch screen because it outlives that
+  /// screen: the queue has to survive the tab being switched away from, the app
+  /// being force-quit, and the person signing out — the last of which clears
+  /// it, since undelivered punches belong to whoever made them.
+  final PunchQueue queue;
 
   static const _tokenKey = 'hrms_api_token';
   static const _deviceNameKey = 'hrms_device_name';
@@ -218,11 +229,17 @@ class Session extends ChangeNotifier {
   Future<void> _clearToken() async {
     await _storage.delete(key: _tokenKey);
     api.token = null;
+
+    // Undelivered punches go with the token. They belong to the person who
+    // made them, and the next person to sign in on this handset must not
+    // inherit them — nor have them posted against their own record.
+    await queue.clear();
   }
 
   @override
   void dispose() {
     push.dispose();
+    queue.dispose();
     super.dispose();
   }
 }

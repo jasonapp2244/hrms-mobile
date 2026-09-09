@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/punch_queue.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -51,6 +52,15 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The queue is read from disk once, on the first build that has a session
+    // to read it with. Anything waiting from a previous launch shows up in the
+    // banner immediately rather than at the next tap.
+    SessionScope.read(context).queue.load();
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
     super.dispose();
@@ -73,6 +83,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         _loadedAt = DateTime.now();
         _loading = false;
       });
+
+      // Reaching the server is the only proof there is a connection, and this
+      // call just did. Drain anything waiting — but not from inside a drain,
+      // which _drainQueue guards against.
+      unawaited(_drainQueue(announce: true));
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -92,6 +107,36 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     if (!today.isClockedIn || _loadedAt == null) return today.workedMinutes;
     final elapsed = DateTime.now().difference(_loadedAt!).inMinutes;
     return today.workedMinutes + (elapsed > 0 ? elapsed : 0);
+  }
+
+  /// Deliver anything the handset could not send at the time.
+  ///
+  /// Attempted on every load rather than on a connectivity event: a network
+  /// interface coming back is not the same as the server being reachable, and
+  /// this screen is refreshed on resume and on every tab switch anyway.
+  Future<void> _drainQueue({bool announce = false}) async {
+    final session = SessionScope.read(context);
+
+    if (session.queue.count.value == 0) return;
+
+    final outcome = await session.queue.flush(session.api);
+
+    if (!mounted) return;
+
+    // A refusal is the one outcome the person has to read: it will not come
+    // back on a retry, and it means a punch they made is not on their record.
+    if (outcome.refusals.isNotEmpty) {
+      _showResult(outcome.refusals.first, Theme.of(context).colorScheme.error);
+    } else if (announce && outcome.changedAnything) {
+      _showResult(
+        outcome.accepted == 1
+            ? 'Your offline punch has been recorded.'
+            : '${outcome.accepted + outcome.duplicate} offline punches recorded.',
+        AppTheme.present,
+      );
+    }
+
+    if (outcome.changedAnything) await _load(silent: true);
   }
 
   Future<void> _punch() async {
@@ -126,6 +171,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         // wanted is already on record, they just tapped twice.
         _showResult('That punch is already recorded.', AppTheme.neutral);
         await _load();
+      } else if (e.isNetworkFailure) {
+        // The whole point of B2.4. The tap is kept at the moment it was made,
+        // and delivered when there is something to deliver it over — rather
+        // than lost, or silently recorded hours later at the wrong time.
+        await _queuePunch();
       } else {
         _showResult(
           e.error == 'no_office'
@@ -137,6 +187,35 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     } finally {
       if (mounted) setState(() => _punching = false);
     }
+  }
+
+  /// Keep a punch that could not be sent.
+  ///
+  /// The time is taken **here**, at the tap, not when it eventually goes — a
+  /// punch delivered four hours late is still a punch made four hours ago, and
+  /// the server records it at the time claimed here.
+  ///
+  /// `intendedType` is what the button read, kept so this screen goes on making
+  /// sense while the queue drains. It is not sent: the server decides the
+  /// direction from the punches before that moment, exactly as for a live one.
+  Future<void> _queuePunch() async {
+    final session = SessionScope.read(context);
+    final body = await session.locator.punchBody();
+
+    await session.queue.add(QueuedPunch(
+      occurredAt: DateTime.now().toUtc().toIso8601String(),
+      intendedType: _today?.willClockIn == true ? 'in' : 'out',
+      latitude: (body['latitude'] as num?)?.toDouble(),
+      longitude: (body['longitude'] as num?)?.toDouble(),
+    ));
+
+    if (!mounted) return;
+
+    _showResult(
+      'No connection — saved. It will be recorded at the time you tapped, '
+      'once you are back online.',
+      AppTheme.late,
+    );
   }
 
   /// Start or end a break (B2.6).
@@ -216,6 +295,12 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
+              // Above the card, because it changes what the numbers below mean:
+              // hours held on the handset are not hours HR can see yet.
+              _QueueBanner(
+                queue: SessionScope.read(context).queue,
+                onRetry: () => _drainQueue(announce: true),
+              ),
               if (_today != null) ...[
                 _StatusCard(today: _today!, workedMinutes: _liveWorkedMinutes),
                 const SizedBox(height: 20),
@@ -406,6 +491,65 @@ class _PunchButton extends StatelessWidget {
                 ],
               ),
       ),
+    );
+  }
+}
+
+/// "2 punches waiting to send" (B2.4).
+///
+/// Listens to the queue rather than being handed a count, so it is right after
+/// a punch is queued from this screen and after one drains in the background,
+/// without either of those having to remember to rebuild it.
+///
+/// Shown whenever anything is waiting — not only while offline. Somebody whose
+/// punch has not reached HR should be able to see that, and try again, at any
+/// point rather than only during the outage.
+class _QueueBanner extends StatelessWidget {
+  const _QueueBanner({required this.queue, required this.onRetry});
+
+  final PunchQueue queue;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: queue.count,
+      builder: (context, waiting, _) {
+        if (waiting == 0) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+            decoration: BoxDecoration(
+              color: AppTheme.late.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.late.withValues(alpha: 0.32)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off, color: AppTheme.late, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    waiting == 1
+                        ? '1 punch waiting to send. It will be recorded at the '
+                            'time you tapped.'
+                        : '$waiting punches waiting to send. They will be '
+                            'recorded at the times you tapped.',
+                    style: const TextStyle(color: AppTheme.late, fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.late),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
