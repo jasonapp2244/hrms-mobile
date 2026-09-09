@@ -255,6 +255,77 @@ void main() {
     });
   });
 
+  group('Directory', () {
+    Map<String, dynamic> page({bool contact = false}) => {
+          'people': [
+            {
+              'id': 4,
+              'employee_code': 'E2',
+              'full_name': 'Bo Ray',
+              'designation': 'Cleaner',
+              'department': 'Ops',
+              'office': 'Head Office',
+              'work_mode': 'office',
+              'photo_url': null,
+              if (contact) 'email': 'bo@acme.test',
+              if (contact) 'phone': '+15550134',
+            },
+          ],
+          'meta': {'current_page': 1, 'last_page': 1},
+          'shows_contact_details': contact,
+        };
+
+    test('a colleague carries where to find them and nothing more', () {
+      final directory = Directory.fromJson(page());
+      final person = directory.people.single;
+
+      expect(person.fullName, 'Bo Ray');
+      expect(person.designation, 'Cleaner');
+      expect(person.office, 'Head Office');
+      expect(person.initials, 'BR');
+    });
+
+    test('contact details are absent until the company shares them', () {
+      final withheld = Directory.fromJson(page());
+
+      expect(withheld.showsContactDetails, isFalse);
+      expect(withheld.people.single.phone, isNull);
+      expect(withheld.people.single.email, isNull);
+
+      final shared = Directory.fromJson(page(contact: true));
+
+      expect(shared.showsContactDetails, isTrue);
+      expect(shared.people.single.phone, '+15550134');
+    });
+
+    test('the flag is read, not inferred from a missing phone', () {
+      // Sharing switched on, this colleague has nothing on file. The app has to
+      // tell that apart from the company withholding it, or it draws a call
+      // button that does nothing.
+      final directory = Directory.fromJson({
+        'people': [
+          {'id': 5, 'employee_code': 'E3', 'full_name': 'Cy Pher', 'phone': null},
+        ],
+        'meta': {'current_page': 1, 'last_page': 1},
+        'shows_contact_details': true,
+      });
+
+      expect(directory.showsContactDetails, isTrue);
+      expect(directory.people.single.phone, isNull);
+    });
+
+    test('knows when there is another page', () {
+      expect(Directory.fromJson(page()).hasMore, isFalse);
+
+      final more = Directory.fromJson({
+        'people': const [],
+        'meta': {'current_page': 1, 'last_page': 3},
+      });
+
+      expect(more.hasMore, isTrue);
+    });
+  });
+
   group('Regularisation', () {
     test('tells a disputed punch from a missing one', () {
       final disputed = Regularisation.fromJson({

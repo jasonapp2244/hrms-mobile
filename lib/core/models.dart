@@ -198,6 +198,100 @@ class Punch {
       );
 }
 
+/// A colleague in the staff directory (B3.8).
+///
+/// The only model in the app describing **somebody else**, and so the thinnest.
+/// Date of birth, address, national id, personal email, emergency contact and
+/// the reporting line are not in the payload at any policy setting — a manager
+/// does not see those for their own team, and a colleague cannot see more than
+/// a manager.
+class DirectoryPerson {
+  DirectoryPerson({
+    required this.id,
+    required this.employeeCode,
+    required this.fullName,
+    this.designation,
+    this.department,
+    this.office,
+    this.workMode,
+    this.photoUrl,
+    this.email,
+    this.phone,
+  });
+
+  final int id;
+  final String employeeCode;
+  final String fullName;
+  final String? designation;
+  final String? department;
+  final String? office;
+  final String? workMode;
+  final String? photoUrl;
+
+  /// Both null unless the company has switched `directory_show_contact_details`
+  /// on. Read the list's `shows_contact_details` to tell "the company withholds
+  /// this" from "this person has none on file" — see [Directory].
+  final String? email;
+  final String? phone;
+
+  String get initials {
+    final parts = fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.characters1();
+    return '${parts.first.characters1()}${parts.last.characters1()}';
+  }
+
+  factory DirectoryPerson.fromJson(Map<String, dynamic> j) => DirectoryPerson(
+        id: _toInt(j['id']),
+        employeeCode: '${j['employee_code'] ?? ''}',
+        fullName: '${j['full_name'] ?? ''}',
+        designation: _str(j['designation']),
+        department: _str(j['department']),
+        office: _str(j['office']),
+        workMode: _str(j['work_mode']),
+        photoUrl: _str(j['photo_url']),
+        email: _str(j['email']),
+        phone: _str(j['phone']),
+      );
+}
+
+/// One page of the directory, and whether this company shares contact details.
+class Directory {
+  Directory({
+    required this.people,
+    required this.showsContactDetails,
+    required this.lastPage,
+    required this.currentPage,
+  });
+
+  final List<DirectoryPerson> people;
+
+  /// Stated by the server rather than inferred from absent keys. The app has to
+  /// tell a company that withholds contact details from a colleague who simply
+  /// has none on file, so it can hide a call button instead of drawing a dead
+  /// one.
+  final bool showsContactDetails;
+
+  final int lastPage;
+  final int currentPage;
+
+  bool get hasMore => currentPage < lastPage;
+
+  factory Directory.fromJson(Map<String, dynamic> j) {
+    final meta = (j['meta'] as Map<String, dynamic>?) ?? const {};
+
+    return Directory(
+      people: ((j['people'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(DirectoryPerson.fromJson)
+          .toList(),
+      showsContactDetails: j['shows_contact_details'] == true,
+      currentPage: _toInt(meta['current_page']),
+      lastPage: _toInt(meta['last_page']),
+    );
+  }
+}
+
 /// A request to have the attendance record corrected (B3.9 / A4.13).
 ///
 /// **Raising only from the app.** Deciding one voids a punch and writes a

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api_client.dart';
 import '../core/theme.dart';
 import '../main.dart';
+import 'directory_screen.dart';
 import 'documents_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -127,6 +128,14 @@ class ProfileScreen extends StatelessWidget {
               ),
               icon: const Icon(Icons.folder_outlined),
               label: const Text('My documents'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const DirectoryScreen()),
+              ),
+              icon: const Icon(Icons.people_outline),
+              label: const Text('Colleagues'),
             ),
             const SizedBox(height: 10),
           ],
