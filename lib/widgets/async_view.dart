@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../core/l10n.dart';
+import '../core/theme.dart';
+
 /// The three states every data screen has, in one place: loading, failed with
 /// a way back, or the real content.
 ///
@@ -48,7 +51,7 @@ class AsyncView extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Try again'),
+                  label: Text(context.t.actionTryAgain),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(140, 44),
                   ),
@@ -61,6 +64,62 @@ class AsyncView extends StatelessWidget {
     }
 
     return child;
+  }
+}
+
+/// Says that what is on screen came off the disk rather than off the wire
+/// (B6.3).
+///
+/// Every screen that can serve a saved copy shows this above it, always. A
+/// roster that is quietly three days old is worse than no roster: somebody
+/// turns up for a shift that was moved, and nothing on the screen ever gave
+/// them a reason to doubt it. The date is part of the message for the same
+/// reason — "offline" alone does not say whether this is an hour stale or a
+/// week.
+class OfflineBanner extends StatelessWidget {
+  const OfflineBanner({super.key, required this.savedAt, this.onRetry});
+
+  /// When this copy was taken. Null hides the banner, so a screen can pass its
+  /// state straight in without branching.
+  final DateTime? savedAt;
+
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final when = savedAt;
+    if (when == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(14, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: colors.neutral.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.neutral.withValues(alpha: 0.34)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off, color: colors.neutral, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.t.offlineSavedCopy(Fmt.savedAt(context.t, when)),
+                style: TextStyle(color: colors.neutral, fontSize: 13),
+              ),
+            ),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(foregroundColor: colors.neutral),
+                child: Text(context.t.actionRetry),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -62,10 +63,15 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so there is nothing to correct.'
-            : e.displayMessage;
+            ? t.correctionsNoEmployeeRecord
+            : e.text(t);
         _loading = false;
       });
     }
@@ -83,14 +89,29 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
   }
 
   Future<void> _withdraw(Regularisation request) async {
+    // Read before the first await: the palette cannot change mid-call, and
+    // reaching for a BuildContext after one is the lint this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Withdraw this request?'),
-        content: Text('${request.summary}, ${Fmt.shortDate(request.workDate)}.'),
+        title: Text(t.correctionsWithdrawTitle),
+        content: Text(
+          t.correctionsWithdrawBody(
+            request.summary(t),
+            Fmt.shortDate(t, request.workDate),
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Withdraw')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t.correctionsKeepIt),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(t.correctionsWithdraw),
+          ),
         ],
       ),
     );
@@ -104,14 +125,14 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Request withdrawn.')));
+          .showSnackBar(SnackBar(content: Text(t.correctionsWithdrawn)));
       _load();
     } on ApiException catch (e) {
       if (!mounted) return;
       // Most likely HR decided it while this screen was open. Reloading shows
       // the decision, which answers it better than the message does.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.displayMessage), backgroundColor: AppTheme.late),
+        SnackBar(content: Text(e.text(t)), backgroundColor: colors.late),
       );
       _load();
     }
@@ -119,16 +140,18 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Corrections')),
+      appBar: AppBar(title: Text(t.correctionsTitle)),
       floatingActionButton: _loading || _error != null
           ? null
           : FloatingActionButton.extended(
               onPressed: _raise,
-              backgroundColor: AppTheme.brand,
-              foregroundColor: Colors.white,
+              // The scheme primary already carries a white label at 4.72:1;
+              // #F26522 does not (B6.4).
               icon: const Icon(Icons.add),
-              label: const Text('Ask for a correction'),
+              label: Text(t.correctionsRaise),
             ),
       body: AsyncView(
         loading: _loading,
@@ -139,14 +162,12 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
           child: _requests.isEmpty
               ? ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    SizedBox(height: 90),
+                  children: [
+                    const SizedBox(height: 90),
                     EmptyState(
                       icon: Icons.rule,
-                      title: 'No corrections asked for',
-                      subtitle: 'If a punch is wrong, or one is missing, ask HR '
-                          'to put it right. Your record is never changed until '
-                          'they agree.',
+                      title: t.correctionsEmptyTitle,
+                      subtitle: t.correctionsEmptySubtitle,
                     ),
                   ],
                 )
@@ -178,14 +199,18 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     final (label, colour) = switch (request.status) {
-      'approved' => ('Approved', AppTheme.present),
-      'rejected' => ('Rejected', AppTheme.absent),
-      'cancelled' => ('Withdrawn', AppTheme.neutral),
-      _ => ('Waiting on HR', AppTheme.late),
+      'approved' => (t.correctionsStatusApproved, colors.present),
+      'rejected' => (t.correctionsStatusRejected, colors.absent),
+      'cancelled' => (t.correctionsStatusWithdrawn, colors.neutral),
+      _ => (t.correctionsStatusWaiting, colors.late),
     };
+
+    final summary = request.summary(t);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -198,7 +223,7 @@ class _RequestCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${request.summary[0].toUpperCase()}${request.summary.substring(1)}',
+                    '${summary[0].toUpperCase()}${summary.substring(1)}',
                     style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                   ),
                 ),
@@ -221,7 +246,10 @@ class _RequestCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${Fmt.shortDate(request.workDate)} · should read ${Fmt.timeOf(request.requestedAt)}',
+              t.correctionsShouldRead(
+                Fmt.shortDate(t, request.workDate),
+                Fmt.timeOf(t, request.requestedAt),
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -240,7 +268,9 @@ class _RequestCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      request.decidedBy == null ? 'HR said' : 'HR — ${request.decidedBy}',
+                      request.decidedBy == null
+                          ? t.correctionsHrSaid
+                          : t.correctionsHrNamed(request.decidedBy!),
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: colour,
@@ -253,13 +283,13 @@ class _RequestCard extends StatelessWidget {
               ),
             ],
             if (onWithdraw != null) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: onWithdraw,
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.absent),
-                  child: const Text('Withdraw'),
+                  style: TextButton.styleFrom(foregroundColor: colors.absent),
+                  child: Text(t.correctionsWithdraw),
                 ),
               ),
             ],
@@ -353,7 +383,7 @@ class _RaiseSheetState extends State<_RaiseSheet> {
           for (final entry in e.fieldErrors.entries)
             if (entry.value.isNotEmpty) entry.key: entry.value.first,
         };
-        _error = _fieldErrors.isEmpty ? e.displayMessage : null;
+        _error = _fieldErrors.isEmpty ? e.text(context.t) : null;
       });
     }
   }
@@ -368,6 +398,7 @@ class _RaiseSheetState extends State<_RaiseSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -382,12 +413,12 @@ class _RaiseSheetState extends State<_RaiseSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Ask for a correction',
+              t.correctionsRaise,
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
             Text(
-              'HR reviews this. Your attendance is not changed until they agree.',
+              t.correctionsSheetBlurb,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -412,19 +443,23 @@ class _RaiseSheetState extends State<_RaiseSheet> {
               initialValue: _disputed,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'Which punch?',
+                labelText: t.correctionsWhichPunch,
                 errorText: _fieldErrors['attendance_log_id'],
               ),
               items: [
-                const DropdownMenuItem<DisputablePunch?>(
+                DropdownMenuItem<DisputablePunch?>(
                   value: null,
-                  child: Text('None of these — one is missing'),
+                  child: Text(t.correctionsNoneOfThese),
                 ),
                 for (final punch in widget.punches)
                   DropdownMenuItem<DisputablePunch?>(
                     value: punch,
                     child: Text(
-                      '${Fmt.shortDate(punch.workDate)} · ${punch.label} ${punch.time}',
+                      t.correctionsPunchOption(
+                        Fmt.shortDate(t, punch.workDate),
+                        punch.label(t),
+                        punch.time,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -440,9 +475,17 @@ class _RaiseSheetState extends State<_RaiseSheet> {
 
             if (_disputed == null) ...[
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'in', label: Text('Check in'), icon: Icon(Icons.login)),
-                  ButtonSegment(value: 'out', label: Text('Check out'), icon: Icon(Icons.logout)),
+                segments: [
+                  ButtonSegment(
+                    value: 'in',
+                    label: Text(t.punchCheckIn),
+                    icon: const Icon(Icons.login),
+                  ),
+                  ButtonSegment(
+                    value: 'out',
+                    label: Text(t.punchCheckOut),
+                    icon: const Icon(Icons.logout),
+                  ),
                 ],
                 selected: {_type},
                 onSelectionChanged: (s) => setState(() => _type = s.first),
@@ -453,8 +496,12 @@ class _RaiseSheetState extends State<_RaiseSheet> {
             OutlinedButton.icon(
               onPressed: _pickWhen,
               icon: const Icon(Icons.schedule),
-              label: Text('Should read ${Fmt.shortDate(_iso(_when).substring(0, 10))}'
-                  ' at ${TimeOfDay.fromDateTime(_when).format(context)}'),
+              label: Text(
+                t.correctionsShouldReadAt(
+                  Fmt.shortDate(t, _iso(_when).substring(0, 10)),
+                  TimeOfDay.fromDateTime(_when).format(context),
+                ),
+              ),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
                 foregroundColor: _fieldErrors['requested_at'] != null
@@ -477,8 +524,8 @@ class _RaiseSheetState extends State<_RaiseSheet> {
               maxLength: 500,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                labelText: 'What happened?',
-                hintText: 'Left at 6pm but forgot to press check out',
+                labelText: t.correctionsWhatHappened,
+                hintText: t.correctionsReasonHint,
                 errorText: _fieldErrors['reason'],
               ),
             ),
@@ -486,14 +533,13 @@ class _RaiseSheetState extends State<_RaiseSheet> {
 
             FilledButton(
               onPressed: _busy ? null : _submit,
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.brand),
               child: _busy
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                     )
-                  : const Text('Send to HR'),
+                  : Text(t.correctionsSend),
             ),
           ],
         ),

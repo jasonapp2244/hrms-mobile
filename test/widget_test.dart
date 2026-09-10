@@ -1,12 +1,19 @@
 import 'dart:async';
 
 import 'package:attendance/core/api_client.dart';
+import 'package:attendance/core/l10n.dart';
 import 'package:attendance/core/location.dart';
 import 'package:attendance/core/models.dart';
 import 'package:attendance/core/theme.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  /// The English strings, for the helpers that format with them. A test has no
+  /// widget tree to read a set out of, and English is the template — so this is
+  /// also what makes an assertion on exact wording meaningful.
+  final t = lookupAppLocalizations(const Locale('en'));
+
   group('ApiException', () {
     test('prefers the field message when a single field failed', () {
       // The server's top-line for a validation failure is generic ("The given
@@ -225,7 +232,8 @@ void main() {
   group('Punch', () {
     test('names all four types, not two', () {
       String labelFor(String type) =>
-          Punch.fromJson({'id': 1, 'type': type, 'status': 'ontime', 'time': '09:00 AM'}).label;
+          Punch.fromJson({'id': 1, 'type': type, 'status': 'ontime', 'time': '09:00 AM'})
+              .label(t);
 
       expect(labelFor('in'), 'Checked in');
       expect(labelFor('out'), 'Checked out');
@@ -250,7 +258,10 @@ void main() {
         {'id': 1, 'type': 'lunch', 'status': 'ontime', 'time': '12:00 PM'},
       );
 
-      expect(odd.label, 'lunch');
+      expect(odd.label(t), 'lunch');
+      // And in every other language too: a type this build has not heard of has
+      // no translation to fall back to, only the server's own word.
+      expect(odd.label(lookupAppLocalizations(const Locale('es'))), 'lunch');
       expect(odd.isBreak, isFalse);
     });
   });
@@ -428,51 +439,112 @@ void main() {
 
   group('Fmt', () {
     test('renders whole and half days correctly', () {
-      expect(Fmt.days(1), '1 day');
-      expect(Fmt.days(2), '2 days');
-      expect(Fmt.days(0.5), '0.5 days');
+      expect(Fmt.days(t, 1), '1 day');
+      expect(Fmt.days(t, 2), '2 days');
+      expect(Fmt.days(t, 0.5), '0.5 days');
     });
 
     test('renders durations a person would read', () {
-      expect(Fmt.duration(0), '0m');
-      expect(Fmt.duration(45), '45m');
-      expect(Fmt.duration(60), '1h');
-      expect(Fmt.duration(434), '7h 14m');
+      expect(Fmt.duration(t, 0), '0m');
+      expect(Fmt.duration(t, 45), '45m');
+      expect(Fmt.duration(t, 60), '1h');
+      expect(Fmt.duration(t, 434), '7h 14m');
     });
 
     test('reads a time in the company zone, not the handset one', () {
       // The string already carries the company's offset. DateTime.parse would
       // convert it to local time, so a punch made at 18:00 in New York would
       // read as 23:00 to somebody whose phone is on London time.
-      expect(Fmt.timeOf('2026-08-03T18:00:00-04:00'), '06:00 PM');
-      expect(Fmt.timeOf('2026-08-03T09:05:00+05:00'), '09:05 AM');
-      expect(Fmt.timeOf('2026-08-03T00:30:00+00:00'), '12:30 AM');
-      expect(Fmt.timeOf('2026-08-03T12:00:00+00:00'), '12:00 PM');
+      expect(Fmt.timeOf(t, '2026-08-03T18:00:00-04:00'), '06:00 PM');
+      expect(Fmt.timeOf(t, '2026-08-03T09:05:00+05:00'), '09:05 AM');
+      expect(Fmt.timeOf(t, '2026-08-03T00:30:00+00:00'), '12:30 AM');
+      expect(Fmt.timeOf(t, '2026-08-03T12:00:00+00:00'), '12:00 PM');
     });
 
     test('a time it cannot parse comes back untouched rather than wrong', () {
-      expect(Fmt.timeOf('not a timestamp'), 'not a timestamp');
+      expect(Fmt.timeOf(t, 'not a timestamp'), 'not a timestamp');
     });
 
     test('a single-day range does not repeat itself', () {
-      expect(Fmt.range('2026-08-04', '2026-08-04'), '4 August 2026');
-      expect(Fmt.range('2026-08-04', '2026-08-06'), '4 Aug – 6 Aug');
+      expect(Fmt.range(t, '2026-08-04', '2026-08-04'), '4 August 2026');
+      expect(Fmt.range(t, '2026-08-04', '2026-08-06'), '4 Aug – 6 Aug');
+    });
+
+    test('names when a cached copy was saved', () {
+      // The offline banner's whole job is to say how stale it is, so "today"
+      // and "yesterday" have to be told apart by the calendar day and not by
+      // a 24-hour arithmetic that calls 23:00 last night "today".
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day, 14, 2);
+
+      expect(Fmt.savedAt(t, today), 'today at 14:02');
+      expect(
+        Fmt.savedAt(t, today.subtract(const Duration(days: 1))),
+        'yesterday at 14:02',
+      );
+
+      final older = today.subtract(const Duration(days: 5));
+      expect(
+        Fmt.savedAt(t, older),
+        '${Fmt.shortDate(t, older.toIso8601String())} at 14:02',
+      );
+    });
+
+    test('pads a single-digit clock', () {
+      final now = DateTime.now();
+
+      expect(
+        Fmt.savedAt(t, DateTime(now.year, now.month, now.day, 8, 5)),
+        'today at 08:05',
+      );
+    });
+
+    test('a date reads the way the language it is drawn in writes one', () {
+      // Spanish puts "de" between the day, the month and the year, which is why
+      // dateLong is a message with three placeholders rather than three strings
+      // glued together in Dart.
+      final es = lookupAppLocalizations(const Locale('es'));
+
+      expect(Fmt.longDate(es, '2026-08-04'), '4 de agosto de 2026');
+      expect(Fmt.shortDate(es, '2026-08-04'), '4 ago');
+      expect(Fmt.days(es, 1), '1 día');
+      expect(Fmt.days(es, 2), '2 días');
+      expect(Fmt.timeOf(es, '2026-08-03T18:00:00-04:00'), '06:00 p. m.');
+    });
+
+    test('a weekday the server wrote in English is drawn in the right one', () {
+      // The roster and the history list both carry a weekday string from a
+      // server that has no idea who is reading it.
+      final es = lookupAppLocalizations(const Locale('es'));
+
+      expect(Fmt.weekdayNamed(es, 'Mon'), 'lun');
+      expect(Fmt.weekdayNamed(es, 'Sunday'), 'dom');
+      expect(Fmt.weekdayNamed(t, 'Wed'), 'Wed');
+
+      // Not a weekday at all: better an English word where a day name belongs
+      // than a blank.
+      expect(Fmt.weekdayNamed(es, 'Quarter'), 'Quarter');
+      expect(Fmt.weekdayNamed(es, ''), '');
     });
   });
 
   group('statusStyle', () {
     test('covers every status the API can send', () {
-      for (final status in [
-        'present',
-        'leave',
-        'holiday',
-        'day_off',
-        'weekend',
-        'absent',
-      ]) {
-        final (_, label) = AppTheme.statusStyle(status);
-        expect(label, isNotEmpty);
-        expect(label, isNot(status));
+      for (final brightness in Brightness.values) {
+        final colors = AppColors.forBrightness(brightness);
+
+        for (final status in [
+          'present',
+          'leave',
+          'holiday',
+          'day_off',
+          'weekend',
+          'absent',
+        ]) {
+          final (_, label) = colors.statusStyle(t, status);
+          expect(label, isNotEmpty);
+          expect(label, isNot(status));
+        }
       }
     });
   });

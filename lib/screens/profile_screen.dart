@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api_client.dart';
+import '../core/biometrics.dart';
+import '../core/l10n.dart';
+import '../core/locale.dart';
 import '../core/theme.dart';
 import '../main.dart';
+import '../widgets/async_view.dart';
 import 'directory_screen.dart';
 import 'documents_screen.dart';
 
@@ -12,17 +16,24 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final session = SessionScope.of(context);
     final user = session.user;
     final theme = Theme.of(context);
+    final t = context.t;
 
     if (user == null) return const SizedBox.shrink();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: Text(t.profileTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
+          // This screen is drawn entirely from the signed-in user, so with no
+          // signal at launch it is drawn from the saved copy of it. Say so:
+          // a department or job title changed since then would otherwise read
+          // as current.
+          OfflineBanner(savedAt: session.offlineSince),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -33,8 +44,8 @@ class ProfileScreen extends StatelessWidget {
                     backgroundColor: AppTheme.brand.withValues(alpha: 0.15),
                     child: Text(
                       user.initials,
-                      style: const TextStyle(
-                        color: AppTheme.brandDeep,
+                      style: TextStyle(
+                        color: colors.accent,
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
                       ),
@@ -79,21 +90,20 @@ class ProfileScreen extends StatelessWidget {
           // somebody to discover it one empty screen at a time.
           if (!user.hasEmployeeRecord) ...[
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.late.withValues(alpha: 0.10),
+                color: colors.late.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.late.withValues(alpha: 0.32)),
+                border: Border.all(color: colors.late.withValues(alpha: 0.32)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppTheme.late, size: 20),
+                  Icon(Icons.info_outline, color: colors.late, size: 20),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'This account is not linked to an employee record, so clocking, '
-                      'leave and schedule are unavailable. Use the web dashboard.',
-                      style: TextStyle(color: AppTheme.late, fontSize: 13),
+                      t.profileNoEmployeeRecord,
+                      style: TextStyle(color: colors.late, fontSize: 13),
                     ),
                   ),
                 ],
@@ -104,18 +114,18 @@ class ProfileScreen extends StatelessWidget {
 
           if (user.employee != null) ...[
             _InfoCard(rows: [
-              ('Department', user.employee!.department ?? '—'),
-              ('Job title', user.employee!.designation ?? '—'),
-              ('Office', user.employee!.office ?? '—'),
-              ('Work mode', _workMode(user.employee!.workMode)),
+              (t.profileDepartment, user.employee!.department ?? '—'),
+              (t.profileJobTitle, user.employee!.designation ?? '—'),
+              (t.profileOffice, user.employee!.office ?? '—'),
+              (t.profileWorkMode, _workMode(t, user.employee!.workMode)),
             ]),
             const SizedBox(height: 16),
           ],
 
           _InfoCard(rows: [
-            ('Company', user.company?.name ?? '—'),
-            ('Timezone', user.company?.timezone ?? '—'),
-            ('Roles', user.roles.isEmpty ? '—' : user.roles.join(', ')),
+            (t.profileCompany, user.company?.name ?? '—'),
+            (t.profileTimezone, user.company?.timezone ?? '—'),
+            (t.profileRoles, user.roles.isEmpty ? '—' : user.roles.join(', ')),
           ]),
           const SizedBox(height: 24),
 
@@ -127,7 +137,7 @@ class ProfileScreen extends StatelessWidget {
                 MaterialPageRoute<void>(builder: (_) => const DocumentsScreen()),
               ),
               icon: const Icon(Icons.folder_outlined),
-              label: const Text('My documents'),
+              label: Text(t.profileMyDocuments),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
@@ -135,33 +145,35 @@ class ProfileScreen extends StatelessWidget {
                 MaterialPageRoute<void>(builder: (_) => const DirectoryScreen()),
               ),
               icon: const Icon(Icons.people_outline),
-              label: const Text('Colleagues'),
+              label: Text(t.profileColleagues),
             ),
             const SizedBox(height: 10),
           ],
           OutlinedButton.icon(
             onPressed: () => _editProfile(context),
             icon: const Icon(Icons.edit_outlined),
-            label: const Text('Edit contact details'),
+            label: Text(t.profileEditContact),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: () => _changePassword(context),
             icon: const Icon(Icons.lock_outline),
-            label: const Text('Change password'),
+            label: Text(t.profileChangePassword),
           ),
           const SizedBox(height: 10),
+          const _LanguageTile(),
+          const _BiometricLockTile(),
           OutlinedButton.icon(
             onPressed: () => _signOut(context, everywhere: false),
             icon: const Icon(Icons.logout),
-            label: const Text('Sign out'),
+            label: Text(t.profileSignOut),
           ),
           const SizedBox(height: 10),
           TextButton.icon(
             onPressed: () => _signOut(context, everywhere: true),
             icon: const Icon(Icons.phonelink_erase, size: 20),
-            label: const Text('Sign out on all devices'),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.absent),
+            label: Text(t.profileSignOutAll),
+            style: TextButton.styleFrom(foregroundColor: colors.absent),
           ),
 
           // Both stores expect the privacy policy to be reachable from inside
@@ -173,12 +185,12 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 4),
           _LinkRow(
             icon: Icons.privacy_tip_outlined,
-            label: 'Privacy policy',
+            label: t.profilePrivacy,
             path: '/privacy',
           ),
           _LinkRow(
             icon: Icons.person_remove_outlined,
-            label: 'Delete my account',
+            label: t.profileDeleteAccount,
             path: '/account-deletion',
           ),
         ],
@@ -186,35 +198,40 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  static String _workMode(String? mode) => switch (mode) {
-        'office' => 'Office',
-        'wfh' => 'Working from home',
-        'hybrid' => 'Hybrid',
+  static String _workMode(AppLocalizations t, String? mode) => switch (mode) {
+        'office' => t.workModeOffice,
+        'wfh' => t.workModeWfh,
+        'hybrid' => t.workModeHybrid,
         _ => mode ?? '—',
       };
 
   Future<void> _signOut(BuildContext context, {required bool everywhere}) async {
+    // Read before the first await: the palette cannot change mid-call, and
+    // reaching for a BuildContext after one is the lint this avoids.
+    final colors = AppColors.of(context);
     final session = SessionScope.read(context);
+    final t = context.t;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(everywhere ? 'Sign out everywhere?' : 'Sign out?'),
+        title: Text(
+          everywhere ? t.profileSignOutAllTitle : t.profileSignOutTitle,
+        ),
         content: Text(
-          everywhere
-              ? 'Every device signed in with this account is signed out, and every '
-                  'registered handset stops receiving your notifications. Use this '
-                  'if a phone has been lost.'
-              : 'You will need your password to sign back in.',
+          everywhere ? t.profileSignOutAllBody : t.profileSignOutBody,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t.actionCancel),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: everywhere ? AppTheme.absent : null,
+              backgroundColor: everywhere ? colors.absent : null,
             ),
-            child: const Text('Sign out'),
+            child: Text(t.profileSignOut),
           ),
         ],
       ),
@@ -250,6 +267,163 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
+/// Which language the app is drawn in (B6.2).
+///
+/// Sits next to the biometric switch because both describe **this handset**
+/// rather than the account, and both survive a sign-out — see [AppLocale] for
+/// why that is the right answer for a language in particular.
+///
+/// Every option is written in its own language. "Spanish" is no help to
+/// somebody looking for the word Español, and the whole reason this row exists
+/// is that they are reading a screen they do not follow.
+class _LanguageTile extends StatelessWidget {
+  const _LanguageTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = context.t;
+    final locale = SessionScope.of(context).locale;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: PopupMenuButton<String>(
+        // The empty string is "follow the phone", which is the default and is
+        // not a language — hence a sentinel rather than a nullable value, which
+        // PopupMenuButton would read as "nothing selected".
+        initialValue: locale.locale?.languageCode ?? '',
+        onSelected: (code) => locale.set(code.isEmpty ? null : Locale(code)),
+        tooltip: t.profileLanguage,
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: '',
+            child: Text(t.languageFollowSystem),
+          ),
+          for (final supported in AppLocale.supported)
+            PopupMenuItem(
+              value: supported.languageCode,
+              child: Text(AppLocale.names[supported.languageCode] ?? supported.languageCode),
+            ),
+        ],
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+          leading: const Icon(Icons.translate, size: 21),
+          title: Text(t.profileLanguage, style: theme.textTheme.bodyMedium),
+          subtitle: Text(
+            locale.followsSystem
+                ? t.languageFollowSystemDetail
+                : t.languageKeptOnSignOut,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Text(
+            locale.followsSystem
+                ? t.languageFollowSystem
+                : (AppLocale.names[locale.locale!.languageCode] ??
+                    locale.locale!.languageCode),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The switch that puts this handset behind its own biometric check (B1.3).
+///
+/// **Drawn only on a phone that has one enrolled.** A row offering fingerprint
+/// unlock on a device with nothing but a PIN would prompt for that PIN and call
+/// it a fingerprint; a row that is present but disabled would invite somebody
+/// to go looking for a setting that is not the app's to change.
+class _BiometricLockTile extends StatefulWidget {
+  const _BiometricLockTile();
+
+  @override
+  State<_BiometricLockTile> createState() => _BiometricLockTileState();
+}
+
+class _BiometricLockTileState extends State<_BiometricLockTile> {
+  /// Asked once. The answer changes only when somebody enrols a fingerprint in
+  /// the phone's own settings, which takes them out of the app and back in.
+  late final Future<bool> _available =
+      SessionScope.read(context).lock.isAvailable();
+
+  bool _busy = false;
+
+  Future<void> _set(bool on) async {
+    final lock = SessionScope.read(context).lock;
+    final messenger = ScaffoldMessenger.of(context);
+    final t = context.t;
+
+    setState(() => _busy = true);
+    try {
+      if (!on) {
+        // No check to turn it off: this screen is already on the far side of
+        // the lock.
+        await lock.disable();
+        return;
+      }
+
+      final outcome = await lock.enable(reason: t.lockPromptReason);
+      if (outcome == BiometricOutcome.granted) return;
+
+      // Turning it on is the one place a refusal has to be reported. The
+      // switch springs back on its own — the state is read from the lock —
+      // so without this it looks like the tap simply missed.
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          outcome == BiometricOutcome.refused
+              ? t.lockNotTurnedOn
+              : AppLock.messageFor(t, outcome),
+        ),
+      ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lock = SessionScope.of(context).lock;
+    final theme = Theme.of(context);
+
+    return FutureBuilder<bool>(
+      future: _available,
+      builder: (context, snapshot) {
+        if (snapshot.data != true) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SwitchListTile(
+            value: lock.isEnabled,
+            onChanged: _busy ? null : _set,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            secondary: const Icon(Icons.fingerprint, size: 21),
+            title: Text(context.t.lockTileTitle, style: theme.textTheme.bodyMedium),
+            subtitle: Text(
+              context.t.lockTileSubtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// A row that opens one of the server's public legal pages in the browser.
 ///
 /// The host comes from the API base URL, so a build pointed at a staging server
@@ -272,7 +446,7 @@ class _LinkRow extends StatelessWidget {
       // Failing silently would look identical to a page that opened behind the
       // app, so say what could not be reached and where it lives.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open $url')),
+        SnackBar(content: Text(context.t.profileCouldNotOpen('$url'))),
       );
     }
   }
@@ -404,14 +578,25 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _loading = false;
-        _error = e.displayMessage;
+        _error = e.text(t);
       });
     }
   }
 
   Future<void> _submit() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -435,9 +620,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated.'),
-          backgroundColor: AppTheme.present,
+        SnackBar(
+          content: Text(t.editProfileSaved),
+          backgroundColor: colors.present,
         ),
       );
     } on ApiException catch (e) {
@@ -448,7 +633,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           for (final entry in e.fieldErrors.entries)
             if (entry.value.isNotEmpty) entry.key: entry.value.first,
         };
-        _error = _fieldErrors.isEmpty ? e.displayMessage : null;
+        _error = _fieldErrors.isEmpty ? e.text(t) : null;
       });
     }
   }
@@ -456,6 +641,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -470,7 +656,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Edit contact details',
+              t.editProfileTitle,
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 20),
@@ -498,7 +684,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 controller: _name,
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
-                  labelText: 'Name',
+                  labelText: t.editProfileName,
                   errorText: _fieldErrors['name'],
                 ),
               ),
@@ -507,7 +693,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 controller: _phone,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: 'Phone',
+                  labelText: t.editProfilePhone,
                   errorText: _fieldErrors['phone'],
                 ),
               ),
@@ -515,23 +701,24 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               TextField(
                 enabled: false,
                 controller: TextEditingController(text: _email),
-                decoration: const InputDecoration(
-                  labelText: 'Sign-in email',
-                  helperText: 'Ask HR to change the address you sign in with.',
+                decoration: InputDecoration(
+                  labelText: t.editProfileSignInEmail,
+                  helperText: t.editProfileEmailHelp,
                   helperMaxLines: 2,
                 ),
               ),
               const SizedBox(height: 20),
               FilledButton(
                 onPressed: _busy ? null : _submit,
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.brand),
+                // Same as everywhere else: the theme primary carries its own
+                // label at 4.72:1, and #F26522 does not (B6.4).
                 child: _busy
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                       )
-                    : const Text('Save'),
+                    : Text(t.actionSave),
               ),
             ],
           ],
@@ -566,6 +753,12 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   }
 
   Future<void> _submit() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -582,9 +775,9 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password changed.'),
-          backgroundColor: AppTheme.present,
+        SnackBar(
+          content: Text(t.passwordChanged),
+          backgroundColor: colors.present,
         ),
       );
     } on ApiException catch (e) {
@@ -596,8 +789,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             if (entry.value.isNotEmpty) entry.key: entry.value.first,
         };
         _error = e.error == 'wrong_password'
-            ? 'That is not your current password.'
-            : (_fieldErrors.isEmpty ? e.displayMessage : null);
+            ? t.passwordWrong
+            : (_fieldErrors.isEmpty ? e.text(t) : null);
       });
     }
   }
@@ -605,6 +798,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -619,7 +813,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Change password',
+              t.passwordTitle,
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 20),
@@ -641,7 +835,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               controller: _current,
               obscureText: true,
               decoration: InputDecoration(
-                labelText: 'Current password',
+                labelText: t.passwordCurrent,
                 errorText: _fieldErrors['current_password'],
               ),
             ),
@@ -650,7 +844,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               controller: _next,
               obscureText: true,
               decoration: InputDecoration(
-                labelText: 'New password',
+                labelText: t.passwordNew,
                 errorText: _fieldErrors['password'],
               ),
             ),
@@ -658,19 +852,18 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             TextField(
               controller: _confirm,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Confirm new password'),
+              decoration: InputDecoration(labelText: t.passwordConfirm),
             ),
             const SizedBox(height: 20),
             FilledButton(
               onPressed: _busy ? null : _submit,
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.brand),
               child: _busy
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                     )
-                  : const Text('Change password'),
+                  : Text(t.passwordTitle),
             ),
           ],
         ),

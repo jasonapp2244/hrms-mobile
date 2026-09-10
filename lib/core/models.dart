@@ -11,6 +11,25 @@
 ///     office clock.
 library;
 
+import '../l10n/generated/app_localizations.dart';
+
+// For PushRoute. A notification in the history points at the same tabs a push
+// does, and parsing it through the same enum is what keeps the two in step.
+import 'push.dart';
+
+/// What a punch type is called on screen, in one place (B6.2).
+///
+/// Two models carry a punch type and both used to spell these out, which is two
+/// places for a break to end up worded differently. A type this build has not
+/// heard of falls through to the server's own key rather than to nothing.
+String punchTypeLabel(AppLocalizations t, String type) => switch (type) {
+      'in' => t.punchCheckedIn,
+      'out' => t.punchCheckedOut,
+      'break_start' => t.punchBreakStarted,
+      'break_end' => t.punchBackFromBreak,
+      _ => type,
+    };
+
 double _toDouble(Object? v) => v is num ? v.toDouble() : 0.0;
 int _toInt(Object? v) => v is num ? v.toInt() : 0;
 String? _str(Object? v) => v == null ? null : '$v';
@@ -180,13 +199,7 @@ class Punch {
 
   /// What this punch is called on screen. One definition, so a break cannot be
   /// worded two ways on two lists.
-  String get label => switch (type) {
-        'in' => 'Checked in',
-        'out' => 'Checked out',
-        'break_start' => 'Break started',
-        'break_end' => 'Back from break',
-        _ => type,
-      };
+  String label(AppLocalizations t) => punchTypeLabel(t, type);
 
   factory Punch.fromJson(Map<String, dynamic> j) => Punch(
         id: _toInt(j['id']),
@@ -340,11 +353,20 @@ class Regularisation {
 
   bool get isPending => status == 'pending';
 
-  String get typeLabel => type == 'in' ? 'Check in' : 'Check out';
+  String typeLabel(AppLocalizations t) =>
+      type == 'in' ? t.punchCheckIn : t.punchCheckOut;
 
-  String get summary => challengesAPunch
-      ? 'Disputing a $typeLabel'.toLowerCase()
-      : 'Missing $typeLabel'.toLowerCase();
+  /// One phrase for what this request is about, lower case.
+  ///
+  /// Four separate messages rather than "disputing a " plus a punch name:
+  /// Spanish does not put the two together in that order, and lower-casing an
+  /// assembled English sentence is not a translation strategy.
+  String summary(AppLocalizations t) => switch ((challengesAPunch, type)) {
+        (true, 'in') => t.correctionsDisputing,
+        (true, _) => t.correctionsDisputingOut,
+        (false, 'in') => t.correctionsMissingIn,
+        (false, _) => t.correctionsMissingOut,
+      };
 
   factory Regularisation.fromJson(Map<String, dynamic> j) => Regularisation(
         id: _toInt(j['id']),
@@ -383,13 +405,7 @@ class DisputablePunch {
   final String time;
   final String? office;
 
-  String get label => switch (type) {
-        'in' => 'Checked in',
-        'out' => 'Checked out',
-        'break_start' => 'Break started',
-        'break_end' => 'Back from break',
-        _ => type,
-      };
+  String label(AppLocalizations t) => punchTypeLabel(t, type);
 
   /// Only in and out can be corrected — `recordManual` has nothing to write for
   /// a break, and a break has no shift to be judged against.
@@ -979,5 +995,60 @@ class TeamRosterDay {
             ? ShiftInfo.fromJson(j['shift'] as Map<String, dynamic>)
             : null,
         holiday: _str(j['holiday']),
+      );
+}
+
+/// One row in the notification history (B5.6).
+///
+/// The server publishes only the four keys every notification class agrees on,
+/// plus a route derived from the type — the stored payload also holds a **web**
+/// URL and per-class extras, and neither is any use here. That is what keeps a
+/// new notification type on the server from being a client change.
+class AppNotification {
+  AppNotification({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    this.type,
+    this.body,
+    this.route,
+    this.readAt,
+  });
+
+  /// A UUID. The server's, and what `POST /notifications/{id}/read` takes.
+  final String id;
+
+  final String title;
+
+  /// ISO 8601 with the company's offset, like every other timestamp here.
+  final String createdAt;
+
+  /// `leave.approved`, `attendance.missing_checkout`, and so on. Shown to
+  /// nobody — it picks the icon.
+  final String? type;
+
+  final String? body;
+
+  /// Where in the app this points, if anywhere. Null for a notification
+  /// addressed to somebody at a desk — a document-expiry warning has no screen
+  /// here, and inventing one to open would be worse than opening nothing.
+  final PushRoute? route;
+
+  final String? readAt;
+
+  bool get isUnread => readAt == null;
+
+  factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
+        id: '${j['id'] ?? ''}',
+        // Empty rather than an English fallback: the screen supplies the word
+        // for a notification the server did not title, in the right language.
+        title: '${j['title'] ?? ''}',
+        createdAt: '${j['created_at'] ?? ''}',
+        type: _str(j['type']),
+        body: _str(j['body']),
+        // Parsed through the same enum a push tap goes through, so a route
+        // this build has never heard of is null rather than a crash.
+        route: PushRoute.parse(j['route']),
+        readAt: _str(j['read_at']),
       );
 }

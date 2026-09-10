@@ -52,9 +52,18 @@ class ApiException implements Exception {
     return (list == null || list.isEmpty) ? null : list.first;
   }
 
-  /// What to actually put in front of a person. Validation failures carry a
-  /// generic top-line ("The given data was invalid") and the useful text sits
-  /// in the field detail, so prefer that when there is exactly one.
+  /// The server's own words for this failure, ready to show.
+  ///
+  /// **Not the whole answer to "what do I put on screen".** The codes the
+  /// client raises itself have no server text behind them and are translated
+  /// by `ApiErrorText.text` in core/l10n.dart, which every screen calls
+  /// instead of this. Empty when the server named no message: there is nothing
+  /// to show, and inventing an English sentence here would put one language
+  /// past the translation layer.
+  ///
+  /// Validation failures carry a generic top-line ("The given data was
+  /// invalid") and the useful text sits in the field detail, so prefer that
+  /// when there is exactly one.
   String get displayMessage {
     if (error == 'validation_failed' && fieldErrors.length == 1) {
       final only = fieldErrors.values.first;
@@ -122,11 +131,23 @@ class ApiClient {
   /// login and on session restore; cleared on logout.
   String? token;
 
+  /// The language this handset is reading the app in (B6.2), for
+  /// `Accept-Language`. Set by [Session] from `AppLocale`, and kept in step
+  /// with it — a header naming a language the person switched away from an
+  /// hour ago is worse than no header.
+  String? acceptLanguage;
+
   Map<String, String> _headers({bool withBody = false}) => {
         // Without this Laravel may answer a failure with an HTML redirect
         // instead of the JSON error shape. The reference calls this out
         // specifically, and it is the single easiest way to break the client.
         'Accept': 'application/json',
+        // What language to answer in, when the server has an answer in it. It
+        // does not yet — every message it sends is English — so this changes
+        // nothing today and is the only thing that will have to be true on the
+        // day it does. Sent on every request rather than only the ones that can
+        // fail: a rejection is not the only thing with words in it.
+        if (acceptLanguage != null) 'Accept-Language': acceptLanguage!,
         if (withBody) 'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       };
@@ -214,7 +235,9 @@ class ApiClient {
 
       throw ApiException(
         error: '${decoded['error'] ?? 'download_failed'}',
-        message: '${decoded['message'] ?? 'That file could not be downloaded.'}',
+        // Empty rather than an English sentence when the server named none:
+        // see [ApiException.displayMessage].
+        message: '${decoded['message'] ?? ''}',
         statusCode: response.statusCode,
       );
     }
@@ -287,7 +310,7 @@ class ApiClient {
 
     throw ApiException(
       error: (decoded['error'] as String?) ?? 'server_error',
-      message: (decoded['message'] as String?) ?? 'Something went wrong.',
+      message: (decoded['message'] as String?) ?? '',
       statusCode: response.statusCode,
       fieldErrors: _parseFieldErrors(decoded['errors']),
     );
@@ -305,3 +328,17 @@ class ApiClient {
 
   void close() => _http.close();
 }
+
+/// What the server calls the platform this build is running on.
+///
+/// One definition, because two endpoints send it — the app gate reads it to
+/// pick a store link, and a crash report carries it — and two copies would
+/// eventually disagree about the spelling of a value the server matches on
+/// exactly. Null on anything else: a desktop build has no store and no store
+/// column, and the server answers such a request as though no platform were
+/// sent, which is the honest outcome.
+String? apiPlatformName() => switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      _ => null,
+    };

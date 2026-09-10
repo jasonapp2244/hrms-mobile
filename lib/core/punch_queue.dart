@@ -176,13 +176,27 @@ class PunchQueue {
   /// arrived leaves the queue exactly as it was — the whole point is that a
   /// punch is not lost because the network was not there.
   Future<SyncOutcome> flush(ApiClient api) async {
-    await load();
-
-    if (_pending.isEmpty || _flushing) {
+    // Claimed before the first await, not after it. `await load()` yields to
+    // the microtask queue even when there is nothing to read, so two callers
+    // arriving together — a resume and a manual retry, which is the pair this
+    // guard exists for — both used to get past a check that ran after it, and
+    // both sent the same punches. The server recognises the second delivery as
+    // duplicates, so nothing was written twice; the cost was on this side, in
+    // an outcome that reported entries as duplicate that had in fact just been
+    // accepted.
+    if (_flushing) {
       return SyncOutcome(stillQueued: _pending.length);
     }
 
     _flushing = true;
+
+    await load();
+
+    if (_pending.isEmpty) {
+      _flushing = false;
+
+      return SyncOutcome(stillQueued: 0);
+    }
 
     // A copy: the queue can be appended to while this is in flight, and only
     // the entries actually sent may be dropped.
@@ -205,7 +219,10 @@ class PunchQueue {
 
       final refusals = results
           .where((r) => r['result'] == 'refused')
-          .map((r) => '${r['message'] ?? 'Refused.'}')
+          // Empty when the server named no reason. The words for that case are
+          // the app's, and they live in the ARB files — inventing an English
+          // sentence here would put one language past the translation layer.
+          .map((r) => '${r['message'] ?? ''}')
           .toList();
 
       _pending = _pending.where((p) => !settled.contains(p.occurredAt)).toList();

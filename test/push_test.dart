@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:attendance/core/api_client.dart';
+import 'package:attendance/core/l10n.dart';
+import 'package:attendance/core/locale.dart';
 import 'package:attendance/core/push.dart';
 import 'package:attendance/core/session.dart';
+import 'package:attendance/screens/home_shell.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,30 +105,44 @@ void main() {
     });
 
     test('every route resolves to a tab that exists in the shell', () {
-      // Matched by label rather than index because the Team tab only exists for
+      // Matched by id rather than by index because the Team tab only exists for
       // somebody with approve-leave, so position 4 is not the same screen for
-      // everybody. A label that does not exist sends the tap nowhere.
+      // everybody — and by id rather than by the label under the icon, which is
+      // translated (B6.2) and would match nothing on a Spanish handset.
       const shellTabs = <String>{
-        'Clock',
-        'History',
-        'Leave',
-        'Schedule',
-        'Team',
-        'Profile',
+        'clock',
+        'history',
+        'leave',
+        'schedule',
+        'team',
+        'profile',
       };
 
       for (final route in PushRoute.values) {
         expect(
           shellTabs,
-          contains(route.tabLabel),
+          contains(route.tabId),
           reason: 'PushRoute.${route.name} points at a tab HomeShell does not build.',
         );
       }
 
-      expect(PushRoute.clock.tabLabel, 'Clock');
-      expect(PushRoute.leave.tabLabel, 'Leave');
-      expect(PushRoute.schedule.tabLabel, 'Schedule');
-      expect(PushRoute.approvals.tabLabel, 'Team');
+      expect(PushRoute.clock.tabId, 'clock');
+      expect(PushRoute.leave.tabId, 'leave');
+      expect(PushRoute.schedule.tabId, 'schedule');
+      expect(PushRoute.approvals.tabId, 'team');
+    });
+
+    test('a tab id has a name in every language the app is built in', () {
+      // The ids above are only useful because something turns them into words.
+      // A route whose id the shell cannot name would draw an "Open" button with
+      // nothing after it.
+      for (final locale in AppLocale.supported) {
+        final t = lookupAppLocalizations(locale);
+
+        for (final route in PushRoute.values) {
+          expect(tabLabel(t, route.tabId), isNotEmpty);
+        }
+      }
     });
 
     test('ignores anything it does not recognise', () {

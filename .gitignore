@@ -57,3 +57,13 @@ app.*.map.json
 # See Push-Notifications_Setup.md.
 /android/app/google-services.json
 /ios/Runner/GoogleService-Info.plist
+
+# Generated from lib/l10n/*.arb by gen_l10n, on `flutter pub get` and on every
+# build. Build output, not source: a committed copy goes stale the moment a
+# string is added without regenerating, and the symptom is a missing
+# translation at runtime rather than an error at compile time.
+/lib/l10n/generated/
+
+# gen_l10n's report of what app_es.arb has not translated yet. Regenerated on
+# every build; `flutter test` reads it and fails when it is not empty.
+/lib/l10n/untranslated.json

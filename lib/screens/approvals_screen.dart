@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
@@ -22,16 +23,18 @@ class ApprovalsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('My team'),
-          bottom: const TabBar(
+          title: Text(t.teamTitle),
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Approvals'),
-              Tab(text: 'In today'),
-              Tab(text: 'Roster'),
+              Tab(text: t.teamTabApprovals),
+              Tab(text: t.teamTabInToday),
+              Tab(text: t.teamTabRoster),
             ],
           ),
         ),
@@ -97,21 +100,25 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
-        _error = e.displayMessage;
+        _error = e.text(t);
         _loading = false;
       });
     }
   }
 
   Future<void> _approve(PendingApproval item) async {
+    final t = context.t;
     final note = await _askForNote(
-      title: 'Approve ${item.employee}?',
-      body:
-          'This passes the request to HR for the final decision. '
-          'Nothing comes off their balance at this step.',
-      hint: 'Note for HR (optional)',
-      confirmLabel: 'Approve',
+      title: t.approvalsApproveTitle(item.employee),
+      body: t.approvalsApproveBody,
+      hint: t.approvalsNoteForHr,
+      confirmLabel: t.approvalsApprove,
       required: false,
     );
     if (note == null || !mounted) return;
@@ -119,16 +126,17 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
     await _act(
       '/leave/approvals/${item.id}/approve',
       body: {if (note.isNotEmpty) 'manager_note': note},
-      success: 'Passed to HR.',
+      success: t.approvalsPassedToHr,
     );
   }
 
   Future<void> _reject(PendingApproval item) async {
+    final t = context.t;
     final note = await _askForNote(
-      title: 'Reject ${item.employee}?',
-      body: '${item.employee} sees the reason you give.',
-      hint: 'Reason',
-      confirmLabel: 'Reject',
+      title: t.approvalsRejectTitle(item.employee),
+      body: t.approvalsRejectBody(item.employee),
+      hint: t.approvalsReason,
+      confirmLabel: t.approvalsReject,
       // The API makes decision_note required on a rejection, so the form does
       // too rather than letting the server bounce it back.
       required: true,
@@ -138,7 +146,7 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
     await _act(
       '/leave/approvals/${item.id}/reject',
       body: {'decision_note': note},
-      success: 'Request rejected.',
+      success: t.approvalsRejected,
     );
   }
 
@@ -147,18 +155,24 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
     required Map<String, dynamic> body,
     required String success,
   }) async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
     try {
       await SessionScope.read(context).api.post(path, body: body);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(success), backgroundColor: AppTheme.present),
+        SnackBar(content: Text(success), backgroundColor: colors.present),
       );
       _load();
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.displayMessage),
+          content: Text(e.text(t)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -201,7 +215,7 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
+                child: Text(context.t.actionCancel),
               ),
               FilledButton(
                 onPressed: valid
@@ -226,12 +240,12 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
         onRefresh: _load,
         child: _pending.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 100),
+                children: [
+                  const SizedBox(height: 100),
                   EmptyState(
                     icon: Icons.inbox_outlined,
-                    title: 'Nothing waiting on you',
-                    subtitle: 'Requests already passed to HR leave this inbox.',
+                    title: context.t.approvalsEmptyTitle,
+                    subtitle: context.t.approvalsEmptySubtitle,
                   ),
                 ],
               )
@@ -266,7 +280,9 @@ class _ApprovalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Card(
       child: Padding(
@@ -280,7 +296,11 @@ class _ApprovalCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${item.leaveType} · ${Fmt.range(item.startDate, item.endDate)} · ${Fmt.days(item.days)}',
+              t.approvalsSummaryLine(
+                item.leaveType,
+                Fmt.range(t, item.startDate, item.endDate),
+                Fmt.days(t, item.days),
+              ),
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -296,12 +316,12 @@ class _ApprovalCard extends StatelessWidget {
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(11),
+                padding: EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  color: AppTheme.late.withValues(alpha: 0.10),
+                  color: colors.late.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppTheme.late.withValues(alpha: 0.32),
+                    color: colors.late.withValues(alpha: 0.32),
                   ),
                 ),
                 child: Column(
@@ -309,16 +329,16 @@ class _ApprovalCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.warning_amber_rounded,
                           size: 17,
-                          color: AppTheme.late,
+                          color: colors.late,
                         ),
-                        const SizedBox(width: 7),
+                        SizedBox(width: 7),
                         Text(
-                          'Also off then',
+                          t.approvalsClashTitle,
                           style: theme.textTheme.labelMedium?.copyWith(
-                            color: AppTheme.late,
+                            color: colors.late,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -327,11 +347,14 @@ class _ApprovalCard extends StatelessWidget {
                     const SizedBox(height: 5),
                     for (final clash in item.clashes)
                       Padding(
-                        padding: const EdgeInsets.only(top: 2),
+                        padding: EdgeInsets.only(top: 2),
                         child: Text(
-                          '${clash.employee} · ${Fmt.range(clash.startDate, clash.endDate)}',
+                          t.approvalsClashLine(
+                            clash.employee,
+                            Fmt.range(t, clash.startDate, clash.endDate),
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppTheme.late,
+                            color: colors.late,
                           ),
                         ),
                       ),
@@ -340,23 +363,23 @@ class _ApprovalCard extends StatelessWidget {
               ),
             ],
 
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
                   onPressed: onReject,
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.absent),
-                  child: const Text('Reject'),
+                  style: TextButton.styleFrom(foregroundColor: colors.absent),
+                  child: Text(t.approvalsReject),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 FilledButton(
                   onPressed: onApprove,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.present,
+                    backgroundColor: colors.present,
                     minimumSize: const Size(110, 42),
                   ),
-                  child: const Text('Approve'),
+                  child: Text(t.approvalsApprove),
                 ),
               ],
             ),
@@ -421,8 +444,13 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
-        _error = e.displayMessage;
+        _error = e.text(t);
         _loading = false;
       });
     }
@@ -438,13 +466,12 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
         onRefresh: _load,
         child: _team.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 100),
+                children: [
+                  const SizedBox(height: 100),
                   EmptyState(
                     icon: Icons.groups_outlined,
-                    title: 'Nobody reports to you',
-                    subtitle:
-                        'Company-wide attendance lives in the web dashboard.',
+                    title: context.t.teamEmptyTitle,
+                    subtitle: context.t.teamEmptySubtitle,
                   ),
                 ],
               )
@@ -538,8 +565,13 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
-        _error = e.displayMessage;
+        _error = e.text(t);
         _loading = false;
       });
     }
@@ -553,6 +585,7 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return AsyncView(
       loading: _loading,
@@ -568,23 +601,22 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
                 IconButton(
                   onPressed: () => _shift(-1),
                   icon: const Icon(Icons.chevron_left),
-                  tooltip: 'Previous week',
+                  tooltip: t.rosterPreviousWeek,
                 ),
                 Text(
-                  _weekOffset == 0
-                      ? 'This week'
-                      : _weekOffset == 1
-                          ? 'Next week'
-                          : _weekOffset == -1
-                              ? 'Last week'
-                              : '${_weekOffset.abs()} weeks '
-                                  '${_weekOffset > 0 ? 'ahead' : 'back'}',
+                  switch (_weekOffset) {
+                    0 => t.rosterThisWeek,
+                    1 => t.rosterWeekAfter,
+                    -1 => t.rosterWeekBefore,
+                    final int w when w > 0 => t.rosterWeeksAhead(w),
+                    final int w => t.rosterWeeksBack(w.abs()),
+                  },
                   style: theme.textTheme.titleSmall,
                 ),
                 IconButton(
                   onPressed: () => _shift(1),
                   icon: const Icon(Icons.chevron_right),
-                  tooltip: 'Next week',
+                  tooltip: t.rosterNextWeek,
                 ),
               ],
             ),
@@ -594,13 +626,12 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
               onRefresh: _load,
               child: _team.isEmpty
                   ? ListView(
-                      children: const [
-                        SizedBox(height: 80),
+                      children: [
+                        const SizedBox(height: 80),
                         EmptyState(
                           icon: Icons.event_busy_outlined,
-                          title: 'Nobody reports to you',
-                          subtitle:
-                              'The full roster lives in the web dashboard.',
+                          title: t.rosterEmptyTitle,
+                          subtitle: t.rosterEmptySubtitle,
                         ),
                       ],
                     )
@@ -629,6 +660,7 @@ class _TeamRosterCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     final working = member.schedule.where((d) => d.isWorking).length;
 
@@ -648,7 +680,7 @@ class _TeamRosterCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$working day${working == 1 ? '' : 's'} on',
+                  t.rosterDaysOn(working),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -671,15 +703,17 @@ class _TeamRosterDayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final t = context.t;
     // Same vocabulary and the same ordering as the employee's own schedule
     // screen: leave and holidays outrank the shift, because they are why
     // nobody is working it.
     final (label, color) = switch (day.status) {
-      'leave' => ('On leave', AppTheme.leave),
-      'holiday' => (day.holiday ?? 'Holiday', AppTheme.neutral),
-      'day_off' => ('Day off', AppTheme.neutral),
-      'weekend' => ('Weekend', AppTheme.neutral),
-      _ => (day.shift?.window ?? 'No shift', AppTheme.present),
+      'leave' => (t.statusOnLeave, colors.leave),
+      'holiday' => (day.holiday ?? t.statusHoliday, colors.neutral),
+      'day_off' => (t.statusDayOff, colors.neutral),
+      'weekend' => (t.statusWeekend, colors.neutral),
+      _ => (day.shift?.window ?? t.scheduleNoShift, colors.present),
     };
 
     return Padding(
@@ -689,7 +723,7 @@ class _TeamRosterDayRow extends StatelessWidget {
           SizedBox(
             width: 58,
             child: Text(
-              Fmt.shortDate(day.date),
+              Fmt.shortDate(t, day.date),
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
             ),
           ),
@@ -712,11 +746,11 @@ class _TeamRosterDayRow extends StatelessWidget {
                 color: AppTheme.brand.withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'rostered',
+              child: Text(
+                t.scheduleRostered,
                 style: TextStyle(
                   fontSize: 10,
-                  color: AppTheme.brandDeep,
+                  color: colors.accent,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -734,7 +768,9 @@ class _TeamSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Card(
       child: Padding(
@@ -750,14 +786,14 @@ class _TeamSummaryCard extends StatelessWidget {
                   style: theme.textTheme.displaySmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -1.5,
-                    color: AppTheme.present,
+                    color: colors.present,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    'on the floor now, of ${summary.total}',
+                    t.teamOnFloorNow(summary.total),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -774,25 +810,29 @@ class _TeamSummaryCard extends StatelessWidget {
               runSpacing: 12,
               children: [
                 _Pill(
-                  label: 'Turned up',
+                  label: t.teamPillTurnedUp,
                   value: summary.present,
-                  color: AppTheme.present,
+                  color: colors.present,
                 ),
-                _Pill(label: 'Late', value: summary.late, color: AppTheme.late),
                 _Pill(
-                  label: 'On leave',
+                  label: t.teamPillLate,
+                  value: summary.late,
+                  color: colors.late,
+                ),
+                _Pill(
+                  label: t.teamPillOnLeave,
                   value: summary.onLeave,
-                  color: AppTheme.leave,
+                  color: colors.leave,
                 ),
                 _Pill(
-                  label: 'Absent',
+                  label: t.teamPillAbsent,
                   value: summary.absent,
-                  color: AppTheme.absent,
+                  color: colors.absent,
                 ),
                 _Pill(
-                  label: 'Off',
+                  label: t.teamPillOff,
                   value: summary.off,
-                  color: AppTheme.neutral,
+                  color: colors.neutral,
                 ),
               ],
             ),
@@ -842,8 +882,10 @@ class _TeamRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
-    final (color, label) = AppTheme.statusStyle(member.status);
+    final t = context.t;
+    final (color, label) = colors.statusStyle(t, member.status);
 
     return ListTile(
       leading: CircleAvatar(
@@ -860,9 +902,9 @@ class _TeamRow extends StatelessWidget {
       subtitle: Text(
         [
           label,
-          if (member.late) 'late',
-          if (member.firstIn != null) 'in ${member.firstIn}',
-          if (member.lastOut != null) 'out ${member.lastOut}',
+          if (member.late) t.teamRowLate,
+          if (member.firstIn != null) t.teamRowIn(member.firstIn!),
+          if (member.lastOut != null) t.teamRowOut(member.lastOut!),
         ].join(' · '),
         style: theme.textTheme.bodySmall,
       ),
@@ -870,14 +912,14 @@ class _TeamRow extends StatelessWidget {
           ? Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(
-                color: AppTheme.present,
+              decoration: BoxDecoration(
+                color: colors.present,
                 shape: BoxShape.circle,
               ),
             )
           : (member.workedMinutes > 0
                 ? Text(
-                    Fmt.duration(member.workedMinutes),
+                    Fmt.duration(t, member.workedMinutes),
                     style: theme.textTheme.bodySmall,
                   )
                 : null),

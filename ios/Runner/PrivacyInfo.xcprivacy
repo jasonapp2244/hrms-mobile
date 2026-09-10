@@ -17,11 +17,16 @@
   shares anything with a third party — the only host it talks to is the
   employer's own server.
 
-  Location is deliberately NOT listed, because the app does not capture it. The
-  server records a coordinate when a punch arrives with one, and the Flutter app
-  has no location plugin wired, so it never sends one. Add
-  NSPrivacyCollectedDataTypeCoarseLocation here when B2.3 is built — before it
-  ships, not after.
+  Location IS listed, as precise: B2.3 shipped and the app reads a fix through
+  `geolocator` at the moment of a punch and sends it with the punch. It declares
+  ACCESS_FINE_LOCATION on Android and NSLocationWhenInUseUsageDescription on
+  iOS, which is precise rather than coarse whatever the user then grants — the
+  declaration describes what is asked for, not what is given.
+
+  This entry was missing for a while after B2.3 shipped, which is exactly the
+  failure the comment above it warned about. An app that collects location
+  without declaring it is the single most common cause of an enforcement
+  removal, and nothing about it fails at build time.
 
   NSPrivacyAccessedAPITypes is empty: the app's own code uses no required-reason
   API. The plugins that do (Firebase, path_provider) ship their own manifests,
@@ -69,6 +74,41 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Read at the moment of a punch and sent with it (B2.3). Never in the
+		     background: there is no NSLocationAlwaysAndWhenInUseUsageDescription
+		     and no ACCESS_BACKGROUND_LOCATION, and a punch that arrives without
+		     a coordinate is recorded anyway. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Crashes the app did not survive (B6.5): the exception, a truncated
+		     message and a stack trace, sent to the employer's own server and to
+		     nowhere else. Linked, because a report delivered after sign-in
+		     carries the token and is attributed. There is no crash SDK and no
+		     analytics SDK here, which is what keeps NSPrivacyTracking false. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

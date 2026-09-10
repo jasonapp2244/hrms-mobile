@@ -20,26 +20,28 @@ import 'api_client.dart';
 /// When a notification gains a route on the server, it needs a row here too.
 enum PushRoute {
   /// Still clocked in after the shift ended (`MissingCheckoutReminder`).
-  clock('clock', 'Clock'),
+  clock('clock', 'clock'),
 
   /// A decision reached the employee (`LeaveRequestDecided`).
-  leave('leave', 'Leave'),
+  leave('leave', 'leave'),
 
   /// The published roster changed under them (`ScheduleUpdated`).
-  schedule('schedule', 'Schedule'),
+  schedule('schedule', 'schedule'),
 
   /// A request arrived for a manager (`LeaveRequestSubmitted`).
-  approvals('approvals', 'Team');
+  approvals('approvals', 'team');
 
-  const PushRoute(this.wireValue, this.tabLabel);
+  const PushRoute(this.wireValue, this.tabId);
 
   /// The string the server sends.
   final String wireValue;
 
-  /// The `HomeShell` tab that answers it. Matched by label rather than index
+  /// The `HomeShell` tab that answers it. Matched by id rather than by index
   /// because the manager tab is only present for somebody with `approve-leave`,
-  /// so index 4 is not the same screen for everybody.
-  final String tabLabel;
+  /// so index 4 is not the same screen for everybody — and by id rather than by
+  /// the label under the icon, because that label is translated (B6.2) and a
+  /// notification would otherwise open nothing at all on a Spanish handset.
+  final String tabId;
 
   /// Null for anything unrecognised — a newer server sending a route this build
   /// has never heard of must open the app normally, not crash it.

@@ -1,0 +1,22 @@
+# gen_l10n's settings. Read by `flutter gen-l10n`, and by `flutter pub get` and
+# every build, because pubspec.yaml carries `generate: true`.
+#
+# The generated Dart goes into lib/l10n/generated/ and is **git-ignored**: it is
+# build output, and a committed copy would go stale the moment somebody added a
+# string without regenerating — which fails at runtime with a missing
+# translation rather than at compile time.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-dir: lib/l10n/generated
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+
+# English is the template, so a getter is never null and no call site has to
+# guard one. A key missing from app_es.arb falls back to the English text
+# rather than to nothing.
+nullable-getter: false
+
+# Names every key that app_es.arb has not translated yet, in a file the test
+# suite reads. A silent English string in a Spanish build is exactly the kind
+# of gap nobody notices until a user does.
+untranslated-messages-file: lib/l10n/untranslated.json

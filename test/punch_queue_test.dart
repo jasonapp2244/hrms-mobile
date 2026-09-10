@@ -128,6 +128,28 @@ void main() {
       expect(fake.sent.single['occurred_at'], '2026-08-03T09:00:00.000Z');
     });
 
+    test('two drains at once are one delivery', () async {
+      // A resume and a manual retry landing together. The guard used to be
+      // checked *after* `await load()`, which yields to the microtask queue
+      // even with nothing to read — so both callers got past it and both sent
+      // the same punches. The server recognised the second delivery as
+      // duplicates, so nothing was written twice; the cost was on this side,
+      // in an outcome reporting punches as duplicate that had just been
+      // accepted.
+      final q = queue();
+      await q.add(punch('2026-08-03T09:00:00.000Z'));
+
+      final fake = api(allAccepted);
+      final outcomes = await Future.wait([
+        q.flush(fake.client),
+        q.flush(fake.client),
+      ]);
+
+      expect(fake.sent, hasLength(1));
+      expect(outcomes.where((o) => o.accepted == 1), hasLength(1));
+      expect(q.pending, isEmpty);
+    });
+
     test('accepted punches leave the queue', () async {
       final q = queue();
       await q.add(punch('2026-08-03T09:00:00.000Z'));

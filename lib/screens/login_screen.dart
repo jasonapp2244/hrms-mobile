@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import 'forgot_password_screen.dart';
@@ -41,6 +42,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _busy = true);
 
+    // Read before the await. Using a BuildContext across one is the lint every
+    // async handler in this app has to answer for, and the strings are needed
+    // in the catch, which is on the far side of it.
+    final t = context.t;
+
     try {
       await SessionScope.read(context).login(
         email: _email.text,
@@ -54,10 +60,9 @@ class _LoginScreenState extends State<LoginScreen> {
         // saying which was wrong would tell an attacker which addresses exist.
         // So this message stays on the form, not against a field.
         _error = switch (e.error) {
-          'invalid_credentials' => 'That email and password do not match.',
-          'account_disabled' => 'This account has been switched off. Contact HR.',
-          'too_many_requests' => 'Too many attempts. Wait a minute and try again.',
-          _ => e.displayMessage,
+          'invalid_credentials' => t.loginBadCredentials,
+          'account_disabled' => t.loginAccountDisabled,
+          _ => e.text(t),
         };
         _emailError = e.fieldError('email');
         _passwordError = e.fieldError('password');
@@ -70,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Scaffold(
       body: SafeArea(
@@ -86,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Icon(Icons.access_time_filled, size: 56, color: AppTheme.brand),
                     const SizedBox(height: 24),
                     Text(
-                      'HR & Attendance',
+                      t.appTitle,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -95,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Sign in with your work account',
+                      t.loginSubtitle,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
@@ -115,12 +121,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.next,
                       enabled: !_busy,
                       decoration: InputDecoration(
-                        labelText: 'Email',
+                        labelText: t.loginEmail,
                         prefixIcon: const Icon(Icons.mail_outline),
                         errorText: _emailError,
                       ),
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Enter your email address.' : null,
+                          (v == null || v.trim().isEmpty) ? t.loginEnterEmail : null,
                     ),
                     const SizedBox(height: 14),
 
@@ -131,17 +137,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _busy ? null : _submit(),
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        labelText: t.loginPassword,
                         prefixIcon: const Icon(Icons.lock_outline),
                         errorText: _passwordError,
                         suffixIcon: IconButton(
                           icon: Icon(_obscured ? Icons.visibility_off : Icons.visibility),
                           onPressed: () => setState(() => _obscured = !_obscured),
-                          tooltip: _obscured ? 'Show password' : 'Hide password',
+                          tooltip: _obscured ? t.loginShowPassword : t.loginHidePassword,
                         ),
                       ),
                       validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Enter your password.' : null,
+                          (v == null || v.isEmpty) ? t.loginEnterPassword : null,
                     ),
                     const SizedBox(height: 24),
 
@@ -156,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Sign in'),
+                          : Text(t.loginSubmit),
                     ),
                     const SizedBox(height: 20),
 
@@ -173,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                      child: const Text('Forgotten your password?'),
+                      child: Text(t.loginForgot),
                     ),
                     const SizedBox(height: 8),
                     Text(

@@ -1,0 +1,957 @@
+{
+    "@@locale": "en",
+    "appTitle": "HR & Attendance",
+    "@appTitle": {
+        "description": "The app name, on the login screen and in the OS task switcher."
+    },
+    "actionTryAgain": "Try again",
+    "@actionTryAgain": {
+        "description": "Button on the failed-to-load state of every data screen."
+    },
+    "actionRetry": "Retry",
+    "@actionRetry": {
+        "description": "Compact retry, inside the offline banner."
+    },
+    "actionCancel": "Cancel",
+    "actionClose": "Close",
+    "actionSave": "Save",
+    "actionDone": "Done",
+    "actionOk": "OK",
+    "actionView": "View",
+    "actionRefresh": "Refresh",
+    "offlineSavedCopy": "Offline — showing the copy saved {when}.",
+    "@offlineSavedCopy": {
+        "description": "Banner above any screen served from the offline cache. The placeholder is already a phrase such as \"today at 14:02\".",
+        "placeholders": {
+            "when": {
+                "type": "String",
+                "example": "today at 14:02"
+            }
+        }
+    },
+    "monthShort1": "Jan",
+    "monthShort2": "Feb",
+    "monthShort3": "Mar",
+    "monthShort4": "Apr",
+    "monthShort5": "May",
+    "monthShort6": "Jun",
+    "monthShort7": "Jul",
+    "monthShort8": "Aug",
+    "monthShort9": "Sep",
+    "monthShort10": "Oct",
+    "monthShort11": "Nov",
+    "monthShort12": "Dec",
+    "monthLong1": "January",
+    "monthLong2": "February",
+    "monthLong3": "March",
+    "monthLong4": "April",
+    "monthLong5": "May",
+    "monthLong6": "June",
+    "monthLong7": "July",
+    "monthLong8": "August",
+    "monthLong9": "September",
+    "monthLong10": "October",
+    "monthLong11": "November",
+    "monthLong12": "December",
+    "weekdayShort1": "Mon",
+    "weekdayShort2": "Tue",
+    "weekdayShort3": "Wed",
+    "weekdayShort4": "Thu",
+    "weekdayShort5": "Fri",
+    "weekdayShort6": "Sat",
+    "weekdayShort7": "Sun",
+    "dateShort": "{day} {month}",
+    "@dateShort": {
+        "description": "A day without its year, as in \"4 Aug\". The order is the translator to change.",
+        "placeholders": {
+            "day": {
+                "type": "String",
+                "example": "4"
+            },
+            "month": {
+                "type": "String",
+                "example": "Aug"
+            }
+        }
+    },
+    "dateLong": "{day} {month} {year}",
+    "@dateLong": {
+        "description": "A full date, as in \"4 August 2026\". Spanish inserts \"de\" twice, which is why this is a message rather than a concatenation.",
+        "placeholders": {
+            "day": {
+                "type": "String",
+                "example": "4"
+            },
+            "month": {
+                "type": "String",
+                "example": "August"
+            },
+            "year": {
+                "type": "String",
+                "example": "2026"
+            }
+        }
+    },
+    "dateRange": "{from} – {to}",
+    "@dateRange": {
+        "description": "Two short dates. A single-day range is drawn as one long date instead.",
+        "placeholders": {
+            "from": {
+                "type": "String"
+            },
+            "to": {
+                "type": "String"
+            }
+        }
+    },
+    "timeAm": "AM",
+    "@timeAm": {
+        "description": "Morning half of a 12-hour clock reading."
+    },
+    "timePm": "PM",
+    "@timePm": {
+        "description": "Afternoon half of a 12-hour clock reading."
+    },
+    "durationMinutes": "{minutes}m",
+    "@durationMinutes": {
+        "description": "Worked time under an hour.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "durationHours": "{hours}h",
+    "@durationHours": {
+        "description": "Worked time on the hour.",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "durationHoursMinutes": "{hours}h {minutes}m",
+    "@durationHoursMinutes": {
+        "description": "Worked time, as in \"7h 14m\".",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            },
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "dayCount": "{amount} {count, plural, =1{day} other{days}}",
+    "@dayCount": {
+        "description": "A leave length. Half days arrive as 0.5, so the number is formatted by the caller and passed in as amount; count is 1 only for exactly one whole day.",
+        "placeholders": {
+            "amount": {
+                "type": "String",
+                "example": "0.5"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "savedToday": "today at {clock}",
+    "@savedToday": {
+        "placeholders": {
+            "clock": {
+                "type": "String",
+                "example": "14:02"
+            }
+        }
+    },
+    "savedYesterday": "yesterday at {clock}",
+    "@savedYesterday": {
+        "placeholders": {
+            "clock": {
+                "type": "String",
+                "example": "08:15"
+            }
+        }
+    },
+    "savedOn": "{date} at {clock}",
+    "@savedOn": {
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Sep"
+            },
+            "clock": {
+                "type": "String",
+                "example": "09:00"
+            }
+        }
+    },
+    "errorNoConnection": "Cannot reach the server. Check your connection and try again.",
+    "@errorNoConnection": {
+        "description": "Any request that never arrived: no signal, a captive portal, a server that is down."
+    },
+    "errorBadResponse": "The server sent something the app could not read.",
+    "errorGeneric": "Something went wrong.",
+    "errorTooManyAttempts": "Too many attempts. Wait a minute and try again.",
+    "errorDownloadFailed": "That file could not be downloaded.",
+    "statusPresent": "Present",
+    "statusOnLeave": "On leave",
+    "statusHoliday": "Holiday",
+    "statusDayOff": "Day off",
+    "statusWeekend": "Weekend",
+    "statusAbsent": "Absent",
+    "tabClock": "Clock",
+    "tabHistory": "History",
+    "tabLeave": "Leave",
+    "tabSchedule": "Schedule",
+    "tabTeam": "Team",
+    "tabProfile": "Profile",
+    "loginSubtitle": "Sign in with your work account",
+    "loginEmail": "Email",
+    "loginPassword": "Password",
+    "loginShowPassword": "Show password",
+    "loginHidePassword": "Hide password",
+    "loginSubmit": "Sign in",
+    "loginForgot": "Forgotten your password?",
+    "loginEnterEmail": "Enter your email address.",
+    "loginEnterPassword": "Enter your password.",
+    "loginBadCredentials": "That email and password do not match.",
+    "@loginBadCredentials": {
+        "description": "Deliberately says nothing about which of the two was wrong."
+    },
+    "loginAccountDisabled": "This account has been switched off. Contact HR.",
+    "forgotTitle": "Reset password",
+    "forgotHeading": "Forgotten your password?",
+    "forgotBlurb": "Enter the email you sign in with and we will send you a link to set a new one.",
+    "forgotSubmit": "Send reset link",
+    "forgotSentTitle": "Check your inbox",
+    "forgotSentBlurb": "If that address has an account, a reset link is on its way. It opens in your browser and stops working after an hour.",
+    "forgotSentWarning": "Setting a new password signs you out on every device, so you will need to sign in here again afterwards.",
+    "forgotBackToSignIn": "Back to sign in",
+    "forgotDifferentEmail": "Use a different address",
+    "scheduleTitle": "Schedule",
+    "scheduleNoneTitle": "No schedule published",
+    "scheduleNoneSubtitle": "Your roster will appear here once HR publishes it.",
+    "scheduleStandingShift": "Standing shift",
+    "scheduleNoShift": "No shift",
+    "scheduleRostered": "rostered",
+    "@scheduleRostered": {
+        "description": "Small pill marking a day that was planned, as against the standing shift filling in. Lower case on purpose."
+    },
+    "scheduleNoEmployeeRecord": "This account has no employee record, so it has no schedule.",
+    "historyTitle": "History",
+    "historyCorrections": "Corrections",
+    "historyDateRange": "Date range",
+    "historyLastDays": "Last {days} days",
+    "@historyLastDays": {
+        "description": "One of the three windows the API allows: 7, 30 or 92 days.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "historyRangeHeading": "LAST {days} DAYS",
+    "@historyRangeHeading": {
+        "description": "Heading over the totals card. Upper case in English; a translator should use whatever their language does for a small heading.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "historyEmptyTitle": "Nothing recorded yet",
+    "historyEmptySubtitle": "Your attendance will appear here once you clock in.",
+    "historyNoEmployeeRecord": "This account has no employee record, so it has no attendance.",
+    "historyStatPresent": "Present",
+    "historyStatLate": "Late",
+    "historyStatLeave": "Leave",
+    "historyStatAbsent": "Absent",
+    "historyStatWorked": "Worked",
+    "historyLateFlag": "late",
+    "@historyLateFlag": {
+        "description": "Small marker beside the status pill on a day somebody arrived late. Lower case on purpose."
+    },
+    "historyInAt": "In {clock}",
+    "@historyInAt": {
+        "placeholders": {
+            "clock": {
+                "type": "String",
+                "example": "09:02"
+            }
+        }
+    },
+    "historyOutAt": " · Out {clock}",
+    "@historyOutAt": {
+        "description": "Appended to the line above. Keep the separator.",
+        "placeholders": {
+            "clock": {
+                "type": "String",
+                "example": "17:30"
+            }
+        }
+    },
+    "historyStillOpen": " · still open",
+    "@historyStillOpen": {
+        "description": "Appended where there is an entry punch and no exit yet. Keep the separator."
+    },
+    "documentsTitle": "My documents",
+    "documentsEmptyTitle": "Nothing on file yet",
+    "documentsEmptySubtitle": "Contracts, ID and certificates HR files against your record appear here.",
+    "documentsNoEmployeeRecord": "This account has no employee record, so there is nothing on file.",
+    "documentsExpiredCount": "{count, plural, =1{1 expired} other{{count} expired}}",
+    "@documentsExpiredCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "documentsExpiringCount": "{count, plural, =1{1 expiring within 30 days} other{{count} expiring within 30 days}}",
+    "@documentsExpiringCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "documentsExpiryNotice": "{summary}. HR has been notified.",
+    "@documentsExpiryNotice": {
+        "description": "The employee usually cannot renew any of these alone, so this is a heads-up rather than a demand.",
+        "placeholders": {
+            "summary": {
+                "type": "String",
+                "example": "1 expired · 2 expiring within 30 days"
+            }
+        }
+    },
+    "documentsBadgeExpired": "Expired",
+    "documentsBadgeSoon": "Expires soon",
+    "documentsExpiresOn": "Expires {date}",
+    "@documentsExpiresOn": {
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            }
+        }
+    },
+    "documentsMetaLine": "{type} · {size}",
+    "@documentsMetaLine": {
+        "description": "Both halves are the servers own words for the document type and its size.",
+        "placeholders": {
+            "type": {
+                "type": "String",
+                "example": "Contract"
+            },
+            "size": {
+                "type": "String",
+                "example": "420 KB"
+            }
+        }
+    },
+    "documentsNoOpener": "Downloaded, but nothing on this phone opens {name}.",
+    "@documentsNoOpener": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "contract.docx"
+            }
+        }
+    },
+    "documentsMissing": "That document is no longer on file. Contact HR.",
+    "documentsNoRoom": "There was no room to save the file.",
+    "directoryTitle": "Colleagues",
+    "directorySearchHint": "Search by name or code",
+    "directoryClearSearch": "Clear the search",
+    "directoryEmptyTitle": "Nobody to show",
+    "directoryNoMatchTitle": "No match",
+    "directoryEmptySubtitle": "Colleagues appear here once HR has added them.",
+    "directoryNoMatchSubtitle": "Nobody here matches \"{term}\".",
+    "@directoryNoMatchSubtitle": {
+        "placeholders": {
+            "term": {
+                "type": "String",
+                "example": "Alvarez"
+            }
+        }
+    },
+    "directoryMorePages": "More colleagues than fit on one page — search to narrow it.",
+    "directoryNoEmployeeRecord": "This account has no employee record, so the directory is unavailable.",
+    "directoryNoHandler": "Nothing on this device opens {value}.",
+    "@directoryNoHandler": {
+        "description": "No mail client, or no dialler on a tablet.",
+        "placeholders": {
+            "value": {
+                "type": "String",
+                "example": "+1 555 0100"
+            }
+        }
+    },
+    "directoryRemote": "Remote",
+    "@directoryRemote": {
+        "description": "Work mode: works from home."
+    },
+    "directoryHybrid": "Hybrid",
+    "@directoryHybrid": {
+        "description": "Work mode: part office, part home."
+    },
+    "directoryCall": "Call",
+    "directoryEmail": "Email",
+    "notificationsTitle": "Notifications",
+    "notificationsMarkAllRead": "Mark all read",
+    "notificationsEmptyTitle": "Nothing yet",
+    "notificationsEmptySubtitle": "Shift reminders and decisions on your leave appear here, and stay here after the banner is gone.",
+    "notificationsOpenTab": "Open {tab}",
+    "@notificationsOpenTab": {
+        "description": "Button that switches to the tab a notification points at. The placeholder is that tab name, already translated.",
+        "placeholders": {
+            "tab": {
+                "type": "String",
+                "example": "Leave"
+            }
+        }
+    },
+    "punchCheckedIn": "Checked in",
+    "punchCheckedOut": "Checked out",
+    "punchBreakStarted": "Break started",
+    "punchBackFromBreak": "Back from break",
+    "punchCheckIn": "Check in",
+    "punchCheckOut": "Check out",
+    "correctionsTitle": "Corrections",
+    "correctionsRaise": "Ask for a correction",
+    "correctionsEmptyTitle": "No corrections asked for",
+    "correctionsEmptySubtitle": "If a punch is wrong, or one is missing, ask HR to put it right. Your record is never changed until they agree.",
+    "correctionsNoEmployeeRecord": "This account has no employee record, so there is nothing to correct.",
+    "correctionsDisputing": "disputing a check in",
+    "@correctionsDisputing": {
+        "description": "Lower case on purpose: it is used mid-sentence and capitalised by the card that shows it as a heading."
+    },
+    "correctionsDisputingOut": "disputing a check out",
+    "correctionsMissingIn": "missing check in",
+    "correctionsMissingOut": "missing check out",
+    "correctionsWithdrawTitle": "Withdraw this request?",
+    "correctionsWithdrawBody": "{summary}, {date}.",
+    "@correctionsWithdrawBody": {
+        "placeholders": {
+            "summary": {
+                "type": "String",
+                "example": "missing check out"
+            },
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            }
+        }
+    },
+    "correctionsKeepIt": "Keep it",
+    "correctionsWithdraw": "Withdraw",
+    "correctionsWithdrawn": "Request withdrawn.",
+    "correctionsStatusApproved": "Approved",
+    "correctionsStatusRejected": "Rejected",
+    "correctionsStatusWithdrawn": "Withdrawn",
+    "correctionsStatusWaiting": "Waiting on HR",
+    "correctionsShouldRead": "{date} · should read {time}",
+    "@correctionsShouldRead": {
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            },
+            "time": {
+                "type": "String",
+                "example": "06:00 PM"
+            }
+        }
+    },
+    "correctionsHrSaid": "HR said",
+    "correctionsHrNamed": "HR — {name}",
+    "@correctionsHrNamed": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "A. Ruiz"
+            }
+        }
+    },
+    "correctionsSheetBlurb": "HR reviews this. Your attendance is not changed until they agree.",
+    "correctionsWhichPunch": "Which punch?",
+    "correctionsNoneOfThese": "None of these — one is missing",
+    "correctionsPunchOption": "{date} · {label} {time}",
+    "@correctionsPunchOption": {
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            },
+            "label": {
+                "type": "String",
+                "example": "Checked in"
+            },
+            "time": {
+                "type": "String",
+                "example": "09:02 AM"
+            }
+        }
+    },
+    "correctionsShouldReadAt": "Should read {date} at {time}",
+    "@correctionsShouldReadAt": {
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            },
+            "time": {
+                "type": "String",
+                "example": "6:00 PM"
+            }
+        }
+    },
+    "correctionsWhatHappened": "What happened?",
+    "correctionsReasonHint": "Left at 6pm but forgot to press check out",
+    "correctionsSend": "Send to HR",
+    "leaveTitle": "Leave",
+    "leaveApply": "Apply",
+    "leaveSectionBalances": "BALANCES",
+    "leaveSectionRequests": "YOUR REQUESTS",
+    "leaveNoTypes": "No leave types are open for booking.",
+    "leaveNoRequests": "You have not applied for any leave yet.",
+    "leaveNoEmployeeRecord": "This account has no employee record, so it cannot book leave.",
+    "leaveUsedOf": "{used} used of {entitled}",
+    "@leaveUsedOf": {
+        "placeholders": {
+            "used": {
+                "type": "String",
+                "example": "4"
+            },
+            "entitled": {
+                "type": "String",
+                "example": "20"
+            }
+        }
+    },
+    "leaveNoFixedLimit": "No fixed limit",
+    "@leaveNoFixedLimit": {
+        "description": "An uncapped type grants no entitlement — unpaid leave is set up this way. \"0 left\" would read as exhausted, which is the opposite."
+    },
+    "leaveDaysLeft": "left",
+    "@leaveDaysLeft": {
+        "description": "Under the big number on a balance card."
+    },
+    "leaveHalfDayShort": "half day",
+    "@leaveHalfDayShort": {
+        "description": "Shown in place of a day count on a half-day request."
+    },
+    "leaveRangeAndLength": "{range} · {length}",
+    "@leaveRangeAndLength": {
+        "placeholders": {
+            "range": {
+                "type": "String",
+                "example": "4 Aug – 6 Aug"
+            },
+            "length": {
+                "type": "String",
+                "example": "3 days"
+            }
+        }
+    },
+    "leaveWithdrawTitle": "Withdraw this request?",
+    "leaveWithdrawBody": "{type}, {range}.",
+    "@leaveWithdrawBody": {
+        "placeholders": {
+            "type": {
+                "type": "String",
+                "example": "Annual leave"
+            },
+            "range": {
+                "type": "String",
+                "example": "4 Aug – 6 Aug"
+            }
+        }
+    },
+    "leaveWithdrawRefund": "The days go back onto your balance.",
+    "@leaveWithdrawRefund": {
+        "description": "Added under the line above, on an approved request only."
+    },
+    "leaveWithdrawn": "Request withdrawn.",
+    "leaveApplyTitle": "Apply for leave",
+    "leaveType": "Leave type",
+    "leaveTypeWithBalance": "{name} ({left} left)",
+    "@leaveTypeWithBalance": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "Annual leave"
+            },
+            "left": {
+                "type": "String",
+                "example": "12"
+            }
+        }
+    },
+    "leaveDates": "Dates",
+    "leaveChooseDates": "Choose dates",
+    "leaveChooseDatesFirst": "Choose the dates first.",
+    "leaveHalfDay": "Half day",
+    "leaveMorning": "Morning",
+    "leaveAfternoon": "Afternoon",
+    "leaveReasonOptional": "Reason (optional)",
+    "leaveSubmit": "Submit request",
+    "leaveFreeDaysNote": "Weekends and company holidays inside your dates are not charged.",
+    "leaveApplied": "Applied for {length} — {stage}.",
+    "@leaveApplied": {
+        "description": "The stage comes from the server and is not translated yet.",
+        "placeholders": {
+            "length": {
+                "type": "String",
+                "example": "3 days"
+            },
+            "stage": {
+                "type": "String",
+                "example": "awaiting manager"
+            }
+        }
+    },
+    "leaveWithdrawAction": "Withdraw",
+    "leaveKeepIt": "Keep it",
+    "clockToday": "Today",
+    "@clockToday": {
+        "description": "App bar title on the clock screen when the signed-in person has no name on record."
+    },
+    "clockNoEmployeeRecord": "This account has no employee record, so there is nothing to clock.",
+    "clockOnBreak": "On a break",
+    "@clockOnBreak": {
+        "description": "A third state, not another word for clocked out: the day is still running, it is the paid total that has paused."
+    },
+    "clockClockedIn": "Clocked in",
+    "clockNotClockedIn": "Not clocked in",
+    "clockWorkedToday": "worked today",
+    "clockShiftLine": "{name} · {window}",
+    "@clockShiftLine": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "Morning"
+            },
+            "window": {
+                "type": "String",
+                "example": "09:00 – 17:00"
+            }
+        }
+    },
+    "clockCooldown": "Just a moment — your last punch is still registering",
+    "@clockCooldown": {
+        "description": "Under the punch button while the duplicate cooldown runs, so a dead button explains itself."
+    },
+    "clockStartBreak": "Start break",
+    "clockEndBreak": "End break",
+    "clockTodaysPunches": "TODAY'S PUNCHES",
+    "clockLateFlag": "late",
+    "clockEarlyFlag": "early",
+    "clockHolidayNote": "Company holiday — {name}",
+    "@clockHolidayNote": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "Labor Day"
+            }
+        }
+    },
+    "clockLeaveNote": "You are on {type} today",
+    "@clockLeaveNote": {
+        "placeholders": {
+            "type": {
+                "type": "String",
+                "example": "annual leave"
+            }
+        }
+    },
+    "clockDayOffNote": "Rostered off today",
+    "clockAlreadyRecorded": "That punch is already recorded.",
+    "clockAlreadyDone": "That is already recorded.",
+    "clockNoOffice": "No office is set up yet. HR needs to add one before you can clock in.",
+    "clockOfflineTitle": "No connection",
+    "clockOfflineBody": "Today's record cannot be read, so this screen cannot show your hours. You can still clock: the punch is kept at the time you tap it and sent as soon as there is a connection.",
+    "clockSaveAPunch": "Save a punch",
+    "clockQueuedNotice": "No connection — saved. It will be recorded at the time you tapped, once you are back online.",
+    "clockQueueWaiting": "{count, plural, =1{1 punch waiting to send. It will be recorded at the time you tapped.} other{{count} punches waiting to send. They will be recorded at the times you tapped.}}",
+    "@clockQueueWaiting": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "clockQueueDelivered": "{count, plural, =1{Your offline punch has been recorded.} other{{count} offline punches recorded.}}",
+    "@clockQueueDelivered": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "bellNoUnread": "Notifications",
+    "bellUnread": "{count, plural, =1{1 unread notification} other{{count} unread notifications}}",
+    "@bellUnread": {
+        "description": "Read out instead of just \"notifications\", so a screen reader gets what the badge shows.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "teamTitle": "My team",
+    "teamTabApprovals": "Approvals",
+    "teamTabInToday": "In today",
+    "teamTabRoster": "Roster",
+    "approvalsEmptyTitle": "Nothing waiting on you",
+    "approvalsEmptySubtitle": "Requests already passed to HR leave this inbox.",
+    "approvalsApproveTitle": "Approve {name}?",
+    "@approvalsApproveTitle": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "M. Torres"
+            }
+        }
+    },
+    "approvalsApproveBody": "This passes the request to HR for the final decision. Nothing comes off their balance at this step.",
+    "approvalsNoteForHr": "Note for HR (optional)",
+    "approvalsApprove": "Approve",
+    "approvalsPassedToHr": "Passed to HR.",
+    "approvalsRejectTitle": "Reject {name}?",
+    "@approvalsRejectTitle": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "M. Torres"
+            }
+        }
+    },
+    "approvalsRejectBody": "{name} sees the reason you give.",
+    "@approvalsRejectBody": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "M. Torres"
+            }
+        }
+    },
+    "approvalsReason": "Reason",
+    "approvalsReject": "Reject",
+    "approvalsRejected": "Request rejected.",
+    "approvalsSummaryLine": "{type} · {range} · {length}",
+    "@approvalsSummaryLine": {
+        "placeholders": {
+            "type": {
+                "type": "String",
+                "example": "Annual leave"
+            },
+            "range": {
+                "type": "String",
+                "example": "4 Aug – 6 Aug"
+            },
+            "length": {
+                "type": "String",
+                "example": "3 days"
+            }
+        }
+    },
+    "approvalsClashTitle": "Also off then",
+    "@approvalsClashTitle": {
+        "description": "Heading over the colleagues whose booked leave overlaps this request. Placed before the approve button because it is meant to inform the decision."
+    },
+    "approvalsClashLine": "{name} · {range}",
+    "@approvalsClashLine": {
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "J. Ruiz"
+            },
+            "range": {
+                "type": "String",
+                "example": "4 Aug – 6 Aug"
+            }
+        }
+    },
+    "teamEmptyTitle": "Nobody reports to you",
+    "teamEmptySubtitle": "Company-wide attendance lives in the web dashboard.",
+    "teamOnFloorNow": "on the floor now, of {total}",
+    "@teamOnFloorNow": {
+        "placeholders": {
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "teamPillTurnedUp": "Turned up",
+    "teamPillLate": "Late",
+    "teamPillOnLeave": "On leave",
+    "teamPillAbsent": "Absent",
+    "teamPillOff": "Off",
+    "teamRowLate": "late",
+    "teamRowIn": "in {time}",
+    "@teamRowIn": {
+        "placeholders": {
+            "time": {
+                "type": "String",
+                "example": "09:02 AM"
+            }
+        }
+    },
+    "teamRowOut": "out {time}",
+    "@teamRowOut": {
+        "placeholders": {
+            "time": {
+                "type": "String",
+                "example": "05:30 PM"
+            }
+        }
+    },
+    "rosterEmptyTitle": "Nobody reports to you",
+    "rosterEmptySubtitle": "The full roster lives in the web dashboard.",
+    "rosterPreviousWeek": "Previous week",
+    "rosterNextWeek": "Next week",
+    "rosterThisWeek": "This week",
+    "rosterWeekAfter": "Next week",
+    "rosterWeekBefore": "Last week",
+    "rosterWeeksAhead": "{count} weeks ahead",
+    "@rosterWeeksAhead": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "rosterWeeksBack": "{count} weeks back",
+    "@rosterWeeksBack": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "rosterDaysOn": "{count, plural, =1{1 day on} other{{count} days on}}",
+    "@rosterDaysOn": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "profileTitle": "Profile",
+    "profileNoEmployeeRecord": "This account is not linked to an employee record, so clocking, leave and schedule are unavailable. Use the web dashboard.",
+    "profileDepartment": "Department",
+    "profileJobTitle": "Job title",
+    "profileOffice": "Office",
+    "profileWorkMode": "Work mode",
+    "profileCompany": "Company",
+    "profileTimezone": "Timezone",
+    "profileRoles": "Roles",
+    "workModeOffice": "Office",
+    "workModeWfh": "Working from home",
+    "workModeHybrid": "Hybrid",
+    "profileMyDocuments": "My documents",
+    "profileColleagues": "Colleagues",
+    "profileEditContact": "Edit contact details",
+    "profileChangePassword": "Change password",
+    "profileSignOut": "Sign out",
+    "profileSignOutAll": "Sign out on all devices",
+    "profilePrivacy": "Privacy policy",
+    "profileDeleteAccount": "Delete my account",
+    "profileCouldNotOpen": "Could not open {url}",
+    "@profileCouldNotOpen": {
+        "placeholders": {
+            "url": {
+                "type": "String",
+                "example": "https://example.com/privacy"
+            }
+        }
+    },
+    "profileSignOutTitle": "Sign out?",
+    "profileSignOutBody": "You will need your password to sign back in.",
+    "profileSignOutAllTitle": "Sign out everywhere?",
+    "profileSignOutAllBody": "Every device signed in with this account is signed out, and every registered handset stops receiving your notifications. Use this if a phone has been lost.",
+    "profileLanguage": "Language",
+    "languageFollowSystem": "Same as this phone",
+    "@languageFollowSystem": {
+        "description": "The default: the app follows the handset's own language setting."
+    },
+    "languageFollowSystemDetail": "Follows the language this phone is set to.",
+    "languageKeptOnSignOut": "Kept on this phone when you sign out, so the sign-in screen stays in the language you chose.",
+    "lockTileTitle": "Unlock with biometrics",
+    "lockTileSubtitle": "Ask for your fingerprint or face when the app opens, and after it has been put down for a minute.",
+    "lockNotTurnedOn": "Not turned on — the check was cancelled.",
+    "lockPromptReason": "Unlock HR & Attendance",
+    "@lockPromptReason": {
+        "description": "Shown by the operating system inside its own fingerprint or face sheet."
+    },
+    "lockNotRecognised": "Not recognised. Try again.",
+    "lockLockedOut": "Too many attempts. Unlock your phone the usual way first, then try again.",
+    "lockUnavailable": "This phone can no longer check. Sign in with your password instead.",
+    "lockScreenTitle": "Locked",
+    "lockScreenPrompt": "Unlock to carry on.",
+    "lockScreenPromptNamed": "Signed in as {name}. Unlock to carry on.",
+    "@lockScreenPromptNamed": {
+        "description": "On a shared work phone this is the difference between \"unlock this\" and \"unlock this, which is still signed in as somebody else\".",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "M. Torres"
+            }
+        }
+    },
+    "lockUnlock": "Unlock",
+    "lockSignOutInstead": "Sign out instead",
+    "lockSignOutTitle": "Sign out instead?",
+    "lockSignOutBody": "This clears the lock and signs you out on this phone. You will need your password to sign back in. Any punch still waiting for a signal is discarded.",
+    "editProfileTitle": "Edit contact details",
+    "editProfileName": "Name",
+    "editProfilePhone": "Phone",
+    "editProfileSignInEmail": "Sign-in email",
+    "editProfileEmailHelp": "Ask HR to change the address you sign in with.",
+    "editProfileSaved": "Profile updated.",
+    "passwordTitle": "Change password",
+    "passwordCurrent": "Current password",
+    "passwordNew": "New password",
+    "passwordConfirm": "Confirm new password",
+    "passwordWrong": "That is not your current password.",
+    "passwordChanged": "Password changed.",
+    "onboardSkip": "Skip",
+    "onboardNext": "Next",
+    "onboardStart": "Get started",
+    "onboardPageOf": "Page {page} of {total}",
+    "@onboardPageOf": {
+        "description": "Read out by a screen reader in place of the row of dots.",
+        "placeholders": {
+            "page": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardClockTitle": "One tap to clock in",
+    "onboardClockBody": "Check in when you arrive and out when you leave. The time on your record comes from the server, not from this phone, so a wrong clock here cannot cost you hours.",
+    "onboardOfflineTitle": "It works with no signal",
+    "onboardOfflineBody": "On a site with no reception the app still opens, and a punch is kept at the moment you tapped it. It is sent as soon as there is a connection — you do not have to remember to do anything.",
+    "onboardLeaveTitle": "Leave and your roster",
+    "onboardLeaveBody": "Book time off, see what is left of your allowance, and check the shifts you are down for. A decision on a request appears here as soon as it is made.",
+    "onboardNotifyTitle": "You will be told",
+    "onboardNotifyBody": "A reminder if you are still clocked in after your shift, and a message when your leave is decided. Everything sent to you stays in the app, so nothing is lost if you miss the banner.",
+    "gateUpdateTitle": "Time to update",
+    "gateUpdateBody": "This version of the app is no longer supported. Update to carry on clocking in.",
+    "@gateUpdateBody": {
+        "description": "A fallback only: the server sends its own wording where it has any, because only it can say when a window ends."
+    },
+    "gateMaintenanceTitle": "Back shortly",
+    "gateMaintenanceBody": "The app is briefly unavailable while maintenance is carried out. Please try again shortly.",
+    "gateOpenStore": "Open the store",
+    "gateNoStore": "Could not open the store. Search for the app by name.",
+    "gateFooter": "Attendance recorded on the web dashboard is unaffected. Speak to your manager if you need to clock in meanwhile.",
+    "notificationsUntitled": "Notification",
+    "@notificationsUntitled": {
+        "description": "Stands in for the title of a notification the server sent without one. Should never appear in practice."
+    }
+}

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/push.dart';
 import '../core/session.dart';
@@ -13,6 +14,20 @@ import 'leave_screen.dart';
 import 'profile_screen.dart';
 import 'punch_screen.dart';
 import 'schedule_screen.dart';
+
+/// What each tab is called, in one place.
+///
+/// The shell draws these under the icons and a notification row names one in
+/// its "Open …" button; two lists would eventually disagree about a word.
+/// Keyed on the tab's stable id, never on the label itself.
+String tabLabel(AppLocalizations t, String id) => switch (id) {
+      'clock' => t.tabClock,
+      'history' => t.tabHistory,
+      'leave' => t.tabLeave,
+      'schedule' => t.tabSchedule,
+      'team' => t.tabTeam,
+      _ => t.tabProfile,
+    };
 
 /// The signed-in frame.
 ///
@@ -30,12 +45,13 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  /// One per tab, keyed by label so that the map survives the manager tab
-  /// appearing or disappearing. See [TabVisibility] for why screens need it.
+  /// One per tab, keyed by the tab's **id** so that the map survives both the
+  /// manager tab appearing or disappearing and the language changing under it.
+  /// See [TabVisibility] for why screens need it.
   final Map<String, TabVisibility> _visibility = {};
 
-  TabVisibility _flagFor(String label, {required bool visible}) =>
-      _visibility.putIfAbsent(label, () => TabVisibility(visible: visible));
+  TabVisibility _flagFor(String id, {required bool visible}) =>
+      _visibility.putIfAbsent(id, () => TabVisibility(visible: visible));
 
   Session? _session;
   StreamSubscription<PushMessage>? _foreground;
@@ -75,8 +91,8 @@ class _HomeShellState extends State<HomeShell> {
     // this morning — must not sit in the notifier retrying on every rebuild.
     session.push.pendingRoute.value = null;
 
-    final tabs = _tabsFor(session.user);
-    final target = tabs.indexWhere((tab) => tab.label == route.tabLabel);
+    final tabs = _tabsFor(context.t, session.user);
+    final target = tabs.indexWhere((tab) => tab.id == route.tabId);
     if (target == -1) return;
 
     _select(target, tabs);
@@ -90,6 +106,13 @@ class _HomeShellState extends State<HomeShell> {
   void _announce(PushMessage message) {
     if (!mounted) return;
 
+    // The row is already in the server's table by the time this arrives, so
+    // the badge moves now rather than at the next refresh (B5.6). Counted
+    // locally rather than re-fetched: one snack bar is not worth a round trip,
+    // and opening the inbox replaces the number with the authoritative one.
+    final unread = _session?.unreadNotifications;
+    if (unread != null) unread.value = unread.value + 1;
+
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
 
@@ -101,7 +124,7 @@ class _HomeShellState extends State<HomeShell> {
         action: message.route == null
             ? null
             : SnackBarAction(
-                label: 'View',
+                label: context.t.actionView,
                 onPressed: () {
                   _session?.push.pendingRoute.value = message.route;
                 },
@@ -114,7 +137,7 @@ class _HomeShellState extends State<HomeShell> {
   /// the one arriving that it is on — the latter is what makes it refetch.
   void _select(int target, List<_Tab> tabs) {
     for (var j = 0; j < tabs.length; j++) {
-      _visibility[tabs[j].label]?.value = j == target;
+      _visibility[tabs[j].id]?.value = j == target;
     }
     if (target != _index) setState(() => _index = target);
   }
@@ -131,7 +154,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
-    final tabs = _tabsFor(session.user);
+    final tabs = _tabsFor(context.t, session.user);
 
     // A permission can be revoked while the app is open. Clamp rather than
     // letting the index run off the end of a list that just got shorter.
@@ -162,50 +185,56 @@ class _HomeShellState extends State<HomeShell> {
   /// A method rather than a `build`-local so that a push route can be resolved
   /// to a position outside a build — the manager tab shifts everything after
   /// it, so the mapping from route to index is not a constant.
-  List<_Tab> _tabsFor(AppUser? user) {
+  List<_Tab> _tabsFor(AppLocalizations t, AppUser? user) {
     return <_Tab>[
       _Tab(
+        id: 'clock',
         icon: Icons.touch_app_outlined,
         selectedIcon: Icons.touch_app,
-        label: 'Clock',
-        screen: PunchScreen(visible: _flagFor('Clock', visible: _index == 0)),
+        label: tabLabel(t, 'clock'),
+        screen: PunchScreen(visible: _flagFor('clock', visible: _index == 0)),
       ),
       _Tab(
+        id: 'history',
         icon: Icons.history_outlined,
         selectedIcon: Icons.history,
-        label: 'History',
+        label: tabLabel(t, 'history'),
         screen: HistoryScreen(
-          visible: _flagFor('History', visible: _index == 1),
+          visible: _flagFor('history', visible: _index == 1),
         ),
       ),
       _Tab(
+        id: 'leave',
         icon: Icons.beach_access_outlined,
         selectedIcon: Icons.beach_access,
-        label: 'Leave',
-        screen: LeaveScreen(visible: _flagFor('Leave', visible: _index == 2)),
+        label: tabLabel(t, 'leave'),
+        screen: LeaveScreen(visible: _flagFor('leave', visible: _index == 2)),
       ),
       _Tab(
+        id: 'schedule',
         icon: Icons.calendar_month_outlined,
         selectedIcon: Icons.calendar_month,
-        label: 'Schedule',
+        label: tabLabel(t, 'schedule'),
         screen: ScheduleScreen(
-          visible: _flagFor('Schedule', visible: _index == 3),
+          visible: _flagFor('schedule', visible: _index == 3),
         ),
       ),
       if (user?.leadsATeam == true)
         _Tab(
+          id: 'team',
           icon: Icons.groups_outlined,
           selectedIcon: Icons.groups,
-          label: 'Team',
+          label: tabLabel(t, 'team'),
           screen: ApprovalsScreen(
-            visible: _flagFor('Team', visible: _index == 4),
+            visible: _flagFor('team', visible: _index == 4),
           ),
         ),
-      const _Tab(
+      _Tab(
+        id: 'profile',
         icon: Icons.person_outline,
         selectedIcon: Icons.person,
-        label: 'Profile',
-        screen: ProfileScreen(),
+        label: tabLabel(t, 'profile'),
+        screen: const ProfileScreen(),
       ),
     ];
   }
@@ -213,14 +242,23 @@ class _HomeShellState extends State<HomeShell> {
 
 class _Tab {
   const _Tab({
+    required this.id,
     required this.icon,
     required this.selectedIcon,
     required this.label,
     required this.screen,
   });
 
+  /// Stable across languages and across builds. Everything that has to *find* a
+  /// tab matches on this — the visibility map and a tapped notification's
+  /// route — because [label] is translated and would find nothing.
+  final String id;
+
   final IconData icon;
   final IconData selectedIcon;
+
+  /// What is drawn under the icon. Display only.
   final String label;
+
   final Widget screen;
 }

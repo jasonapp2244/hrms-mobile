@@ -38,6 +38,14 @@
 	     position at the moment of a punch and at no other time. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is recorded with each clock in and clock out, so your employer can confirm where attendance was logged. It is only read at the moment you tap the button, never in the background.</string>
+	<!-- Face ID (B1.3). Same rule as the location key: iOS kills the app rather
+	     than refusing the request when this is missing, and only on a device
+	     with Face ID — a Touch ID handset and the simulator both let it
+	     through, so its absence survives most testing. Touch ID needs no key
+	     of its own. The lock is optional and off until somebody switches it on
+	     in Profile, which is why this says "if you turn on". -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>If you turn on biometric unlock, Face ID is used to open the app on this phone instead of typing your password. The scan is checked by iOS and never leaves your device.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

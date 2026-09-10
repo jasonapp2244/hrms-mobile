@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../main.dart';
 
 /// Asks the server to email a reset link.
@@ -42,6 +43,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _busy = true);
 
+    // Before the await: the catch needs the strings and cannot reach for a
+    // context on the far side of one.
+    final t = context.t;
+
     try {
       await SessionScope.read(context).api.post(
         '/auth/forgot-password',
@@ -56,9 +61,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.error == 'too_many_requests'
-            ? 'Too many attempts. Wait a minute and try again.'
-            : e.displayMessage;
+        _error = e.text(t);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -70,14 +73,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset password')),
+      appBar: AppBar(title: Text(context.t.forgotTitle)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
-              child: _sent ? _confirmation(theme) : _form(theme),
+              child: _sent ? _confirmation(theme, context.t) : _form(theme, context.t),
             ),
           ),
         ),
@@ -85,7 +88,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  Widget _form(ThemeData theme) {
+  Widget _form(ThemeData theme, AppLocalizations t) {
     return Form(
       key: _formKey,
       child: Column(
@@ -98,15 +101,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Forgotten your password?',
+            t.forgotHeading,
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           Text(
-            "Enter the email you sign in with and we'll send you a link to set "
-            'a new one.',
+            t.forgotBlurb,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -130,13 +132,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             enabled: !_busy,
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _busy ? null : _submit(),
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.mail_outline),
+            decoration: InputDecoration(
+              labelText: t.loginEmail,
+              prefixIcon: const Icon(Icons.mail_outline),
             ),
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Enter your email address.'
-                : null,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? t.loginEnterEmail : null,
           ),
           const SizedBox(height: 24),
 
@@ -151,14 +152,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Send reset link'),
+                : Text(t.forgotSubmit),
           ),
         ],
       ),
     );
   }
 
-  Widget _confirmation(ThemeData theme) {
+  Widget _confirmation(ThemeData theme, AppLocalizations t) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -169,23 +170,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 20),
         Text(
-          'Check your inbox',
+          t.forgotSentTitle,
           textAlign: TextAlign.center,
           style: theme.textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
         Text(
-          'If that address has an account, a reset link is on its way. It opens '
-          'in your browser and stops working after an hour.',
+          t.forgotSentBlurb,
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Text(
-          'Setting a new password signs you out on every device, so you will '
-          'need to sign in here again afterwards.',
+          t.forgotSentWarning,
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -193,14 +192,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const SizedBox(height: 28),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Back to sign in'),
+          child: Text(t.forgotBackToSignIn),
         ),
         const SizedBox(height: 8),
         TextButton(
           // Nothing was confirmed to have been sent, so a mistyped address
           // fails silently by design. This is the way back from that.
           onPressed: () => setState(() => _sent = false),
-          child: const Text('Use a different address'),
+          child: Text(t.forgotDifferentEmail),
         ),
       ],
     );

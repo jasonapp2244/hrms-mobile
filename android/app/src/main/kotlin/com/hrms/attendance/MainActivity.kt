@@ -4,9 +4,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity() {
+/**
+ * A FragmentActivity, not a plain FlutterActivity.
+ *
+ * `local_auth` (B1.3) draws the system's biometric prompt through
+ * androidx.biometric, which is a Fragment and needs a FragmentManager to
+ * attach to. Under FlutterActivity there is none, and the call fails at
+ * runtime on the first press of Unlock rather than at build time.
+ *
+ * LaunchTheme and NormalTheme descend from Theme.AppCompat for the same
+ * dependency — that prompt crashes on Android 8 and below without one.
+ */
+class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

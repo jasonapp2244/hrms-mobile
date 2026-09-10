@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
+import '../core/offline_cache.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -26,6 +28,10 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
   HistoryTotals? _totals;
   bool _loading = true;
   String? _error;
+
+  /// When the rows on screen were saved, or null when they came from the
+  /// server just now. Drives the offline banner (B6.3).
+  DateTime? _cachedAt;
 
   /// The API caps the window at 92 days, so these are the only offers.
   int _rangeDays = 30;
@@ -51,32 +57,45 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
     });
 
     try {
-      final api = SessionScope.read(context).api;
+      final session = SessionScope.read(context);
       final to = DateTime.now();
       final from = to.subtract(Duration(days: _rangeDays - 1));
 
-      final res = await api.get(
+      // One saved copy per range: the three offers are three different
+      // questions, and the answer to a 92-day window is not the answer to a
+      // 7-day one. A copy taken yesterday covers yesterday's window, which is
+      // why the banner names the day it was taken.
+      final res = await session.cache.fetch(
+        session.api,
         '/attendance/history',
+        key: OfflineCache.historyKey(_rangeDays),
         query: {'from': _ymd(from), 'to': _ymd(to)},
       );
 
       if (!mounted) return;
       setState(() {
-        _days = ((res['days'] as List?) ?? const [])
+        _days = ((res.body['days'] as List?) ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(HistoryDay.fromJson)
             .toList();
-        _totals = res['totals'] is Map<String, dynamic>
-            ? HistoryTotals.fromJson(res['totals'] as Map<String, dynamic>)
+        _totals = res.body['totals'] is Map<String, dynamic>
+            ? HistoryTotals.fromJson(res.body['totals'] as Map<String, dynamic>)
             : null;
+        _cachedAt = res.cachedAt;
         _loading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so it has no attendance.'
-            : e.displayMessage;
+            ? t.historyNoEmployeeRecord
+            : e.text(t);
+        _cachedAt = null;
         _loading = false;
       });
     }
@@ -89,31 +108,33 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('History'),
+        title: Text(t.historyTitle),
         actions: [
           // Next to the record it disputes, rather than on a tab of its own.
           // Asking for a correction is rare and only makes sense here.
           IconButton(
             icon: const Icon(Icons.rule),
-            tooltip: 'Corrections',
+            tooltip: t.historyCorrections,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const RegularisationsScreen()),
             ),
           ),
           PopupMenuButton<int>(
             initialValue: _rangeDays,
-            tooltip: 'Date range',
+            tooltip: t.historyDateRange,
             icon: const Icon(Icons.tune),
             onSelected: (v) {
               setState(() => _rangeDays = v);
               _load();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 7, child: Text('Last 7 days')),
-              PopupMenuItem(value: 30, child: Text('Last 30 days')),
-              PopupMenuItem(value: 92, child: Text('Last 92 days')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 7, child: Text(t.historyLastDays(7))),
+              PopupMenuItem(value: 30, child: Text(t.historyLastDays(30))),
+              PopupMenuItem(value: 92, child: Text(t.historyLastDays(92))),
             ],
           ),
         ],
@@ -126,19 +147,21 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
           onRefresh: _load,
           child: _days.isEmpty
               ? ListView(
-                  children: const [
-                    SizedBox(height: 120),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  children: [
+                    OfflineBanner(savedAt: _cachedAt, onRetry: _load),
+                    const SizedBox(height: 104),
                     EmptyState(
                       icon: Icons.history,
-                      title: 'Nothing recorded yet',
-                      subtitle:
-                          'Your attendance will appear here once you clock in.',
+                      title: t.historyEmptyTitle,
+                      subtitle: t.historyEmptySubtitle,
                     ),
                   ],
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   children: [
+                    OfflineBanner(savedAt: _cachedAt, onRetry: _load),
                     if (_totals != null) ...[
                       _TotalsCard(totals: _totals!, rangeDays: _rangeDays),
                       const SizedBox(height: 20),
@@ -169,7 +192,9 @@ class _TotalsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Card(
       child: Padding(
@@ -178,7 +203,7 @@ class _TotalsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'LAST $rangeDays DAYS',
+              t.historyRangeHeading(rangeDays),
               style: theme.textTheme.labelSmall?.copyWith(
                 letterSpacing: 1.1,
                 fontWeight: FontWeight.w700,
@@ -191,28 +216,28 @@ class _TotalsCard extends StatelessWidget {
               runSpacing: 14,
               children: [
                 _Stat(
-                  label: 'Present',
+                  label: t.historyStatPresent,
                   value: '${totals.presentDays}',
-                  color: AppTheme.present,
+                  color: colors.present,
                 ),
                 _Stat(
-                  label: 'Late',
+                  label: t.historyStatLate,
                   value: '${totals.lateDays}',
-                  color: AppTheme.late,
+                  color: colors.late,
                 ),
                 _Stat(
-                  label: 'Leave',
+                  label: t.historyStatLeave,
                   value: '${totals.leaveDays}',
-                  color: AppTheme.leave,
+                  color: colors.leave,
                 ),
                 _Stat(
-                  label: 'Absent',
+                  label: t.historyStatAbsent,
                   value: '${totals.absentDays}',
-                  color: AppTheme.absent,
+                  color: colors.absent,
                 ),
                 _Stat(
-                  label: 'Worked',
-                  value: Fmt.duration(totals.workedMinutes),
+                  label: t.historyStatWorked,
+                  value: Fmt.duration(t, totals.workedMinutes),
                   color: theme.colorScheme.onSurface,
                 ),
               ],
@@ -264,8 +289,10 @@ class _DayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
-    final (color, label) = AppTheme.statusStyle(day.status);
+    final t = context.t;
+    final (color, label) = colors.statusStyle(t, day.status);
 
     return ListTile(
       leading: SizedBox(
@@ -274,13 +301,14 @@ class _DayRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              day.weekday,
+              // English on the wire, whoever is reading it.
+              Fmt.weekdayNamed(t, day.weekday),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             Text(
-              Fmt.shortDate(day.date),
+              Fmt.shortDate(t, day.date),
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ],
@@ -305,9 +333,9 @@ class _DayRow extends StatelessWidget {
           ),
           if (day.late) ...[
             const SizedBox(width: 6),
-            const Text(
-              'late',
-              style: TextStyle(color: AppTheme.late, fontSize: 11.5),
+            Text(
+              t.historyLateFlag,
+              style: TextStyle(color: colors.late, fontSize: 11.5),
             ),
           ],
         ],
@@ -316,13 +344,15 @@ class _DayRow extends StatelessWidget {
           ? Text(day.holiday!)
           : (day.firstIn != null
                 ? Text(
-                    'In ${_clock(day.firstIn!)}'
-                    '${day.lastOut != null ? ' · Out ${_clock(day.lastOut!)}' : ' · still open'}',
+                    t.historyInAt(_clock(day.firstIn!)) +
+                        (day.lastOut != null
+                            ? t.historyOutAt(_clock(day.lastOut!))
+                            : t.historyStillOpen),
                   )
                 : null),
       trailing: day.workedMinutes > 0
           ? Text(
-              Fmt.duration(day.workedMinutes),
+              Fmt.duration(t, day.workedMinutes),
               style: const TextStyle(fontWeight: FontWeight.w600),
             )
           : null,
@@ -333,8 +363,8 @@ class _DayRow extends StatelessWidget {
   /// the clock face off it directly rather than converting — converting would
   /// re-render an employee's office time in whatever zone the handset is in.
   static String _clock(String iso) {
-    final t = iso.contains('T') ? iso.split('T')[1] : iso;
-    final parts = t.split(':');
-    return parts.length >= 2 ? '${parts[0]}:${parts[1]}' : t;
+    final time = iso.contains('T') ? iso.split('T')[1] : iso;
+    final parts = time.split(':');
+    return parts.length >= 2 ? '${parts[0]}:${parts[1]}' : time;
   }
 }

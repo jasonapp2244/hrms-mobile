@@ -5,6 +5,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -64,10 +65,15 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so there is nothing on file.'
-            : e.displayMessage;
+            ? t.documentsNoEmployeeRecord
+            : e.text(t);
         _loading = false;
       });
     }
@@ -82,6 +88,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   /// browse would undo the point of streaming them through an authenticated
   /// endpoint in the first place. The OS clears this directory on its own.
   Future<void> _open(EmployeeDocument document) async {
+    // Read before the first await: the palette cannot change mid-call, and
+    // reaching for a BuildContext after one is the lint this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
     if (_busyId != null) return;
     setState(() => _busyId = document.id);
 
@@ -103,22 +113,17 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       if (result.type != ResultType.done) {
         // Most often no app installed for the type — a .docx on a bare
         // handset. Say that rather than leaving the tap looking ignored.
-        _say(
-          'Downloaded, but nothing on this phone opens ${document.originalName}.',
-          AppTheme.late,
-        );
+        _say(t.documentsNoOpener(document.originalName), colors.late);
       }
     } on ApiException catch (e) {
       if (!mounted) return;
       _say(
-        e.error == 'file_missing'
-            ? 'That document is no longer on file. Contact HR.'
-            : e.displayMessage,
+        e.error == 'file_missing' ? t.documentsMissing : e.text(t),
         Theme.of(context).colorScheme.error,
       );
     } on FileSystemException {
       if (!mounted) return;
-      _say('There was no room to save the file.', Theme.of(context).colorScheme.error);
+      _say(t.documentsNoRoom, Theme.of(context).colorScheme.error);
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -141,13 +146,15 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My documents'),
+        title: Text(t.documentsTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: t.actionRefresh,
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -157,11 +164,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         error: _error,
         onRetry: _load,
         child: _documents.isEmpty
-            ? const EmptyState(
+            ? EmptyState(
                 icon: Icons.folder_open_outlined,
-                title: 'Nothing on file yet',
-                subtitle: 'Contracts, ID and certificates HR files against your '
-                    'record appear here.',
+                title: t.documentsEmptyTitle,
+                subtitle: t.documentsEmptySubtitle,
               )
             : RefreshIndicator(
                 onRefresh: _load,
@@ -200,12 +206,14 @@ class _ExpiryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final t = context.t;
     final urgent = expired > 0;
-    final colour = urgent ? AppTheme.absent : AppTheme.late;
+    final colour = urgent ? colors.absent : colors.late;
 
     final parts = <String>[
-      if (expired > 0) '$expired expired',
-      if (expiringSoon > 0) '$expiringSoon expiring within 30 days',
+      if (expired > 0) t.documentsExpiredCount(expired),
+      if (expiringSoon > 0) t.documentsExpiringCount(expiringSoon),
     ];
 
     return Container(
@@ -223,7 +231,7 @@ class _ExpiryBanner extends StatelessWidget {
             child: Text(
               // HR is chased about these too, so this is a heads-up rather than
               // a demand — the employee usually cannot renew anything alone.
-              '${parts.join(' · ')}. HR has been notified.',
+              t.documentsExpiryNotice(parts.join(' · ')),
               style: TextStyle(color: colour, fontSize: 13),
             ),
           ),
@@ -246,19 +254,21 @@ class _DocumentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     final (badge, badgeColour) = switch (document.expiryState) {
-      'expired' => ('Expired', AppTheme.absent),
-      'soon' => ('Expires soon', AppTheme.late),
-      _ => (null, AppTheme.neutral),
+      'expired' => (t.documentsBadgeExpired, colors.absent),
+      'soon' => (t.documentsBadgeSoon, colors.late),
+      _ => (null, colors.neutral),
     };
 
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        leading: Icon(_iconFor(document.mimeType), size: 30, color: AppTheme.brandDeep),
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        leading: Icon(_iconFor(document.mimeType), size: 30, color: colors.accent),
         title: Text(
           document.title,
           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -268,7 +278,7 @@ class _DocumentTile extends StatelessWidget {
           children: [
             const SizedBox(height: 3),
             Text(
-              '${document.typeLabel} · ${document.sizeLabel}',
+              t.documentsMetaLine(document.typeLabel, document.sizeLabel),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -276,7 +286,7 @@ class _DocumentTile extends StatelessWidget {
             if (document.expiresOn != null) ...[
               const SizedBox(height: 4),
               Text(
-                'Expires ${Fmt.shortDate(document.expiresOn!)}',
+                t.documentsExpiresOn(Fmt.shortDate(t, document.expiresOn!)),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: badge == null ? theme.colorScheme.outline : badgeColour,
                   fontWeight: badge == null ? FontWeight.w400 : FontWeight.w600,

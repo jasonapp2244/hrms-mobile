@@ -4,12 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
+import '../core/offline_cache.dart';
 import '../core/punch_queue.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import 'notifications_screen.dart';
 
 /// The home screen: one big button, and enough context around it that somebody
 /// can tell at a glance whether they are clocked in and for how long.
@@ -35,6 +38,15 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   /// refreshes without hammering the endpoint.
   Timer? _ticker;
   DateTime? _loadedAt;
+
+  /// When the card on screen was saved, or null when the server answered just
+  /// now. Also what stops the worked-hours figure ticking: see [_load].
+  DateTime? _cachedAt;
+
+  /// No signal, and no copy of *today* to fall back on — the ordinary case of
+  /// opening the app at a site with no reception, having last used it
+  /// yesterday. See [_load].
+  bool _offlineWithoutToday = false;
 
   @override
   ValueListenable<bool> get visibility => widget.visible;
@@ -75,29 +87,87 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     });
 
     try {
-      final api = SessionScope.read(context).api;
-      final res = await api.get('/attendance/today');
+      final session = SessionScope.read(context);
+
+      // The saved copy is what keeps this screen — and with it the button that
+      // queues a punch — reachable with no signal. Without it the first
+      // refresh after the signal goes replaces the whole screen with a "try
+      // again", and B2.4's queue can no longer be added to.
+      //
+      // Only today's copy will do. Yesterday's says "clocked out at 17:30" and
+      // would have somebody believing they had already clocked in this morning.
+      final res = await session.cache.fetch(
+        session.api,
+        '/attendance/today',
+        key: OfflineCache.keyToday,
+        stillValid: (body) => '${body['date']}' == _ymd(DateTime.now()),
+      );
+
       if (!mounted) return;
       setState(() {
-        _today = TodayStatus.fromJson(res);
-        _loadedAt = DateTime.now();
+        _offlineWithoutToday = false;
+        _today = TodayStatus.fromJson(res.body);
+        // Null for a saved copy, which freezes the worked-hours figure. Ticking
+        // it on would add every minute since the copy was taken, including the
+        // ones after a clock-out the handset never heard about.
+        _loadedAt = res.cachedAt == null ? DateTime.now() : null;
+        _cachedAt = res.cachedAt;
         _loading = false;
       });
 
-      // Reaching the server is the only proof there is a connection, and this
-      // call just did. Drain anything waiting — but not from inside a drain,
-      // which _drainQueue guards against.
-      unawaited(_drainQueue(announce: true));
+      // Reaching the server is the only proof there is a connection, and a
+      // fresh answer is that proof — a cached one is the opposite. Drain
+      // anything waiting, but not from inside a drain, which _drainQueue
+      // guards against.
+      if (res.cachedAt == null) unawaited(_drainQueue(announce: true));
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
+
+      // No signal, and yesterday's copy was rightly refused. This is the
+      // ordinary way somebody arrives here — a site with no reception, the app
+      // last opened the evening before — and it is precisely when B2.4's queue
+      // is needed. An error page with a "try again" button would leave them no
+      // way to record that they turned up.
+      //
+      // The day's state is genuinely unknown, so nothing is drawn that claims
+      // to know it: no worked-hours card, no in-or-out wording. Just a punch
+      // that will be kept at the time it was made. The server decides the
+      // direction when it arrives, exactly as it does for a live one.
+      final signedInEmployee =
+          SessionScope.read(context).user?.hasEmployeeRecord == true;
+
+      if (e.isNetworkFailure && signedInEmployee) {
+        setState(() {
+          _offlineWithoutToday = true;
+          _today = null;
+          _cachedAt = null;
+          _loadedAt = null;
+          _error = null;
+          _loading = false;
+        });
+        return;
+      }
+
       setState(() {
+        _offlineWithoutToday = false;
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so there is nothing to clock.'
-            : e.displayMessage;
+            ? t.clockNoEmployeeRecord
+            : e.text(t);
+        _cachedAt = null;
         _loading = false;
       });
     }
   }
+
+  static String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// Minutes worked, extrapolated from the last load. Only the open stretch
   /// grows — closed pairs are fixed.
@@ -115,6 +185,10 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   /// interface coming back is not the same as the server being reachable, and
   /// this screen is refreshed on resume and on every tab switch anyway.
   Future<void> _drainQueue({bool announce = false}) async {
+    // Read before the first await: the palette cannot change mid-call, and
+    // reaching for a BuildContext after one is the lint this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
     final session = SessionScope.read(context);
 
     if (session.queue.count.value == 0) return;
@@ -126,13 +200,17 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     // A refusal is the one outcome the person has to read: it will not come
     // back on a retry, and it means a punch they made is not on their record.
     if (outcome.refusals.isNotEmpty) {
-      _showResult(outcome.refusals.first, Theme.of(context).colorScheme.error);
+      final refusal = outcome.refusals.first;
+      _showResult(
+        refusal.isEmpty ? t.errorGeneric : refusal,
+        Theme.of(context).colorScheme.error,
+      );
     } else if (announce && outcome.changedAnything) {
       _showResult(
-        outcome.accepted == 1
-            ? 'Your offline punch has been recorded.'
-            : '${outcome.accepted + outcome.duplicate} offline punches recorded.',
-        AppTheme.present,
+        t.clockQueueDelivered(
+          outcome.accepted == 1 ? 1 : outcome.accepted + outcome.duplicate,
+        ),
+        colors.present,
       );
     }
 
@@ -140,6 +218,12 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   }
 
   Future<void> _punch() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
     if (_punching) return;
     setState(() => _punching = true);
 
@@ -160,7 +244,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       if (!mounted) return;
       _showResult(
         '${res['message']}',
-        punch.status == 'late' ? AppTheme.late : AppTheme.present,
+        punch.status == 'late' ? colors.late : colors.present,
       );
       await _load();
     } on ApiException catch (e) {
@@ -169,7 +253,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       if (e.isDuplicateScan) {
         // Reads as success to the person holding the phone: the punch they
         // wanted is already on record, they just tapped twice.
-        _showResult('That punch is already recorded.', AppTheme.neutral);
+        _showResult(t.clockAlreadyRecorded, colors.neutral);
         await _load();
       } else if (e.isNetworkFailure) {
         // The whole point of B2.4. The tap is kept at the moment it was made,
@@ -178,9 +262,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         await _queuePunch();
       } else {
         _showResult(
-          e.error == 'no_office'
-              ? 'No office is set up yet. HR needs to add one before you can clock in.'
-              : e.displayMessage,
+          e.error == 'no_office' ? t.clockNoOffice : e.text(t),
           Theme.of(context).colorScheme.error,
         );
       }
@@ -199,11 +281,19 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   /// sense while the queue drains. It is not sent: the server decides the
   /// direction from the punches before that moment, exactly as for a live one.
   Future<void> _queuePunch() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
     final session = SessionScope.read(context);
     final body = await session.locator.punchBody();
 
     await session.queue.add(QueuedPunch(
       occurredAt: DateTime.now().toUtc().toIso8601String(),
+      // Falls to 'out' when the day could not be read at all — the offline
+      // card above. Nothing renders this, and the server ignores it, so a
+      // guess here costs nothing; a guess on the wire would cost a punch.
       intendedType: _today?.willClockIn == true ? 'in' : 'out',
       latitude: (body['latitude'] as num?)?.toDouble(),
       longitude: (body['longitude'] as num?)?.toDouble(),
@@ -211,11 +301,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
 
     if (!mounted) return;
 
-    _showResult(
-      'No connection — saved. It will be recorded at the time you tapped, '
-      'once you are back online.',
-      AppTheme.late,
-    );
+    _showResult(t.clockQueuedNotice, colors.late);
   }
 
   /// Start or end a break (B2.6).
@@ -225,6 +311,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   /// in a state for one, a punch never is. `break_not_available` means the
   /// screen is out of date, so it reloads rather than blaming the person.
   Future<void> _break() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
     if (_breaking) return;
     setState(() => _breaking = true);
 
@@ -237,21 +328,21 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       );
 
       if (!mounted) return;
-      _showResult('${res['message']}', AppTheme.neutral);
+      _showResult('${res['message']}', colors.neutral);
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
 
       if (e.isDuplicateScan) {
-        _showResult('That is already recorded.', AppTheme.neutral);
+        _showResult(t.clockAlreadyDone, colors.neutral);
         await _load();
       } else if (e.error == 'break_not_available') {
         // The day moved on under the screen — clocked out on another device,
         // most likely. Refreshing answers it better than any message would.
-        _showResult(e.displayMessage, AppTheme.late);
+        _showResult(e.text(t), colors.late);
         await _load();
       } else {
-        _showResult(e.displayMessage, Theme.of(context).colorScheme.error);
+        _showResult(e.text(t), Theme.of(context).colorScheme.error);
       }
     } finally {
       if (mounted) setState(() => _breaking = false);
@@ -272,15 +363,22 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
 
   @override
   Widget build(BuildContext context) {
-    final user = SessionScope.of(context).user;
+    final session = SessionScope.of(context);
+    final user = session.user;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(user?.employee?.fullName ?? user?.name ?? 'Today'),
+        title: Text(
+          user?.employee?.fullName ?? user?.name ?? context.t.clockToday,
+        ),
         actions: [
+          // The way into the notification history (B5.6). On this tab because
+          // it is the one everybody opens; a sixth tab for something read once
+          // a week would cost the clock screen room it needs more.
+          _NotificationBell(unread: session.unreadNotifications),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: context.t.actionRefresh,
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -301,6 +399,19 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
                 queue: SessionScope.read(context).queue,
                 onRetry: () => _drainQueue(announce: true),
               ),
+              // Below the queue banner: a punch waiting to send is the more
+              // urgent of the two, and the one the person may need to act on.
+              OfflineBanner(savedAt: _cachedAt, onRetry: _load),
+              if (_offlineWithoutToday)
+                _OfflineClockCard(
+                  busy: _punching,
+                  // The same handler as the live button. It posts first and
+                  // queues only when that actually fails — trying is the only
+                  // honest test of a connection, and one may well have come
+                  // back since this screen gave up.
+                  onPressed: _punch,
+                  onRetry: _load,
+                ),
               if (_today != null) ...[
                 _StatusCard(today: _today!, workedMinutes: _liveWorkedMinutes),
                 const SizedBox(height: 20),
@@ -334,6 +445,142 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   }
 }
 
+/// The clock screen with no signal and no copy of today (B6.3 / B2.4).
+///
+/// Deliberately says nothing about whether the person is on the clock. The
+/// handset does not know, and guessing from the last punch it happens to
+/// remember is how somebody ends up told they are already at work.
+/// The bell, with a count when there is one (B5.6).
+///
+/// Listens to the session's counter rather than being handed a number, so it
+/// is right after the inbox is read and after a push lands with the app open,
+/// without the clock screen having to know about either.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.unread});
+
+  final ValueListenable<int> unread;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: unread,
+      builder: (context, count, _) {
+        final bell = IconButton(
+          // Says the number, not just "notifications" — a screen reader user
+          // gets what the badge shows rather than what it looks like.
+          tooltip: count == 0
+              ? context.t.bellNoUnread
+              : context.t.bellUnread(count),
+          icon: const Icon(Icons.notifications_none),
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationsScreen(),
+              ),
+            );
+          },
+        );
+
+        if (count == 0) return bell;
+
+        return Badge.count(
+          count: count,
+          // Sits over the icon rather than replacing it, so the control keeps
+          // its 48dp target whatever the badge does.
+          alignment: const Alignment(0.42, -0.42),
+          child: bell,
+        );
+      },
+    );
+  }
+}
+
+class _OfflineClockCard extends StatelessWidget {
+  const _OfflineClockCard({
+    required this.busy,
+    required this.onPressed,
+    required this.onRetry,
+  });
+
+  final bool busy;
+  final VoidCallback onPressed;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final theme = Theme.of(context);
+    final t = context.t;
+
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.cloud_off, color: colors.late, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      t.clockOfflineTitle,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Spacer(),
+                    TextButton(
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        foregroundColor: colors.late,
+                      ),
+                      child: Text(t.actionRetry),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  t.clockOfflineBody,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          height: 72,
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: busy ? null : onPressed,
+            icon: busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  )
+                : const Icon(Icons.more_time, size: 26),
+            label: Text(
+              t.clockSaveAPunch,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.late,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.today, required this.workedMinutes});
 
@@ -342,7 +589,9 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
     final clockedIn = today.isClockedIn;
 
     return Card(
@@ -358,26 +607,31 @@ class _StatusCard extends StatelessWidget {
                   height: 10,
                   decoration: BoxDecoration(
                     color: today.onBreak
-                        ? AppTheme.late
-                        : (clockedIn ? AppTheme.present : AppTheme.neutral),
+                        ? colors.late
+                        : (clockedIn ? colors.present : colors.neutral),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  // On a break is a third state, not a fourth word for clocked
-                  // out. The clock is still running on the day; it is the paid
-                  // total below that has paused.
-                  today.onBreak
-                      ? 'On a break'
-                      : (clockedIn ? 'Clocked in' : 'Not clocked in'),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                // Flexible rather than fixed (B6.4): at the OS's larger font
+                // sizes "Not clocked in" and the date together are wider than
+                // the card, and a plain Row clips whatever is on the right.
+                Expanded(
+                  child: Text(
+                    // On a break is a third state, not a fourth word for
+                    // clocked out. The clock is still running on the day; it is
+                    // the paid total below that has paused.
+                    today.onBreak
+                        ? t.clockOnBreak
+                        : (clockedIn ? t.clockClockedIn : t.clockNotClockedIn),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text(
-                  Fmt.shortDate(today.date),
+                  Fmt.shortDate(t, today.date),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -385,22 +639,26 @@ class _StatusCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            // A Wrap, not a Row (B6.4). `displaySmall` at 2× is most of the
+            // card's width on its own, and "worked today" beside it does not
+            // fit at all — so at large sizes it drops to its own line instead
+            // of being clipped off the right edge.
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 10,
               children: [
                 Text(
-                  Fmt.duration(workedMinutes),
+                  Fmt.duration(t, workedMinutes),
                   style: theme.textTheme.displaySmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -1.5,
                     fontFeatures: const [],
                   ),
                 ),
-                const SizedBox(width: 10),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    'worked today',
+                    t.clockWorkedToday,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -420,7 +678,7 @@ class _StatusCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '${today.shift!.name} · ${today.shift!.window}',
+                      t.clockShiftLine(today.shift!.name, today.shift!.window),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -446,12 +704,23 @@ class _PunchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clockingIn = today.willClockIn;
+    final t = context.t;
 
-    return SizedBox(
-      height: 120,
+    // A minimum, not a height (B6.4). At the OS's larger font sizes the 21px
+    // label and the cooldown note under it need more than 120px, and a fixed
+    // box clips them — on the one control the whole app exists for.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 120),
       child: FilledButton(
         onPressed: busy ? null : onPressed,
         style: FilledButton.styleFrom(
+          // The theme's `Size.fromHeight(50)` would otherwise fight the
+          // constraint above and pin this back to 50.
+          minimumSize: const Size.fromHeight(120),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          // #F26522 at 21px semibold is large text by WCAG, which asks 3:1 of
+          // it — 3.15 clears that. The ordinary 16px buttons do not, which is
+          // why `primary` is the deeper orange and this one names its own.
           backgroundColor: clockingIn ? AppTheme.brand : AppTheme.brandDeep,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
@@ -468,7 +737,7 @@ class _PunchButton extends StatelessWidget {
                   Icon(clockingIn ? Icons.login : Icons.logout, size: 34),
                   const SizedBox(height: 8),
                   Text(
-                    clockingIn ? 'Check in' : 'Check out',
+                    clockingIn ? t.punchCheckIn : t.punchCheckOut,
                     style: const TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w700,
@@ -477,11 +746,11 @@ class _PunchButton extends StatelessWidget {
                   // can_check is false only while the duplicate cooldown runs.
                   // Say why the button is dead rather than letting a tap fail.
                   if (!today.canCheck)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        'Just a moment — your last punch is still registering',
-                        style: TextStyle(
+                        t.clockCooldown,
+                        style: const TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w400,
                         ),
@@ -512,38 +781,36 @@ class _QueueBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final t = context.t;
     return ValueListenableBuilder<int>(
       valueListenable: queue.count,
       builder: (context, waiting, _) {
         if (waiting == 0) return const SizedBox.shrink();
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: EdgeInsets.only(bottom: 16),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+            padding: EdgeInsets.fromLTRB(14, 10, 8, 10),
             decoration: BoxDecoration(
-              color: AppTheme.late.withValues(alpha: 0.10),
+              color: colors.late.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.late.withValues(alpha: 0.32)),
+              border: Border.all(color: colors.late.withValues(alpha: 0.32)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.cloud_off, color: AppTheme.late, size: 20),
+                Icon(Icons.cloud_off, color: colors.late, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    waiting == 1
-                        ? '1 punch waiting to send. It will be recorded at the '
-                            'time you tapped.'
-                        : '$waiting punches waiting to send. They will be '
-                            'recorded at the times you tapped.',
-                    style: const TextStyle(color: AppTheme.late, fontSize: 13),
+                    t.clockQueueWaiting(waiting),
+                    style: TextStyle(color: colors.late, fontSize: 13),
                   ),
                 ),
                 TextButton(
                   onPressed: onRetry,
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.late),
-                  child: const Text('Retry'),
+                  style: TextButton.styleFrom(foregroundColor: colors.late),
+                  child: Text(t.actionRetry),
                 ),
               ],
             ),
@@ -570,9 +837,12 @@ class _BreakButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starting = today.willStartBreak;
+    final t = context.t;
 
-    return SizedBox(
-      height: 56,
+    // Same reasoning as the punch button: a floor rather than a ceiling, so a
+    // 16px label at 2× scale grows the button instead of being clipped by it.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
       child: OutlinedButton.icon(
         onPressed: busy ? null : onPressed,
         icon: busy
@@ -583,7 +853,7 @@ class _BreakButton extends StatelessWidget {
               )
             : Icon(starting ? Icons.free_breakfast_outlined : Icons.play_arrow),
         label: Text(
-          starting ? 'Start break' : 'End break',
+          starting ? t.clockStartBreak : t.clockEndBreak,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
@@ -591,6 +861,8 @@ class _BreakButton extends StatelessWidget {
           // colour. Starting one is unremarkable and stays quiet.
           foregroundColor: starting ? null : AppTheme.brandDeep,
           side: starting ? null : const BorderSide(color: AppTheme.brandDeep, width: 1.6),
+          // The theme's 48 would pin this back under the 56 above.
+          minimumSize: const Size.fromHeight(56),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
@@ -608,21 +880,23 @@ class _DayNotes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final t = context.t;
     final notes = <(IconData, String, Color)>[
       if (today.holiday != null)
         (
           Icons.celebration_outlined,
-          'Company holiday — ${today.holiday}',
-          AppTheme.neutral,
+          t.clockHolidayNote(today.holiday!),
+          colors.neutral,
         ),
       if (today.leave != null)
         (
           Icons.beach_access_outlined,
-          'You are on ${today.leave} today',
-          AppTheme.leave,
+          t.clockLeaveNote(today.leave!),
+          colors.leave,
         ),
       if (today.isDayOff)
-        (Icons.weekend_outlined, 'Rostered off today', AppTheme.neutral),
+        (Icons.weekend_outlined, t.clockDayOffNote, colors.neutral),
     ];
 
     if (notes.isEmpty) return const SizedBox.shrink();
@@ -665,13 +939,15 @@ class _PunchList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "TODAY'S PUNCHES",
+          t.clockTodaysPunches,
           style: theme.textTheme.labelSmall?.copyWith(
             letterSpacing: 1.1,
             fontWeight: FontWeight.w700,
@@ -696,11 +972,11 @@ class _PunchList extends StatelessWidget {
                       _ => Icons.play_arrow,
                     },
                     color: punches[i].isBreak
-                        ? AppTheme.late
-                        : (punches[i].isIn ? AppTheme.present : AppTheme.neutral),
+                        ? colors.late
+                        : (punches[i].isIn ? colors.present : colors.neutral),
                   ),
                   title: Text(
-                    punches[i].label,
+                    punches[i].label(t),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: punches[i].office != null
@@ -715,14 +991,14 @@ class _PunchList extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       if (punches[i].status == 'late')
-                        const Text(
-                          'late',
-                          style: TextStyle(fontSize: 11, color: AppTheme.late),
+                        Text(
+                          t.clockLateFlag,
+                          style: TextStyle(fontSize: 11, color: colors.late),
                         )
                       else if (punches[i].status == 'early_leave')
-                        const Text(
-                          'early',
-                          style: TextStyle(fontSize: 11, color: AppTheme.late),
+                        Text(
+                          t.clockEarlyFlag,
+                          style: TextStyle(fontSize: 11, color: colors.late),
                         ),
                     ],
                   ),

@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
+import '../core/offline_cache.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -29,6 +31,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
   bool _loading = true;
   String? _error;
 
+  /// When the roster on screen was saved, or null when it came from the server
+  /// just now. Drives the offline banner (B6.3).
+  DateTime? _cachedAt;
+
   @override
   ValueListenable<bool> get visibility => widget.visible;
 
@@ -50,24 +56,43 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
     });
 
     try {
-      final res = await SessionScope.read(context).api.get('/schedule');
+      final session = SessionScope.read(context);
+
+      // Falls back to the last published roster this handset saw when the
+      // request cannot be made at all. A roster is the thing people check on
+      // the way to work, which is exactly where the signal is worst.
+      final res = await session.cache.fetch(
+        session.api,
+        '/schedule',
+        key: OfflineCache.keySchedule,
+      );
+
       if (!mounted) return;
       setState(() {
-        _days = ((res['days'] as List?) ?? const [])
+        _days = ((res.body['days'] as List?) ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(ScheduleDay.fromJson)
             .toList();
-        _standing = res['standing_shift'] is Map<String, dynamic>
-            ? ShiftInfo.fromJson(res['standing_shift'] as Map<String, dynamic>)
+        _standing = res.body['standing_shift'] is Map<String, dynamic>
+            ? ShiftInfo.fromJson(
+                res.body['standing_shift'] as Map<String, dynamic>,
+              )
             : null;
+        _cachedAt = res.cachedAt;
         _loading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so it has no schedule.'
-            : e.displayMessage;
+            ? t.scheduleNoEmployeeRecord
+            : e.text(t);
+        _cachedAt = null;
         _loading = false;
       });
     }
@@ -76,9 +101,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = context.t;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Schedule')),
+      appBar: AppBar(title: Text(t.scheduleTitle)),
       body: AsyncView(
         loading: _loading,
         error: _error,
@@ -87,19 +113,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
           onRefresh: _load,
           child: _days.isEmpty
               ? ListView(
-                  children: const [
-                    SizedBox(height: 120),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  children: [
+                    OfflineBanner(savedAt: _cachedAt, onRetry: _load),
+                    const SizedBox(height: 104),
                     EmptyState(
                       icon: Icons.calendar_month,
-                      title: 'No schedule published',
-                      subtitle:
-                          'Your roster will appear here once HR publishes it.',
+                      title: t.scheduleNoneTitle,
+                      subtitle: t.scheduleNoneSubtitle,
                     ),
                   ],
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   children: [
+                    OfflineBanner(savedAt: _cachedAt, onRetry: _load),
                     if (_standing != null) ...[
                       Card(
                         child: Padding(
@@ -113,7 +141,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Standing shift',
+                                      t.scheduleStandingShift,
                                       style: theme.textTheme.labelSmall
                                           ?.copyWith(
                                             color: theme
@@ -161,33 +189,35 @@ class _ScheduleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final theme = Theme.of(context);
+    final t = context.t;
 
     // Order matters: leave and holidays override the shift that would
     // otherwise show, because they are why nobody is working it.
     final (label, color, icon) = switch (true) {
       _ when day.leave != null => (
         day.leave!,
-        AppTheme.leave,
+        colors.leave,
         Icons.beach_access,
       ),
       _ when day.holiday != null => (
         day.holiday!,
-        AppTheme.neutral,
+        colors.neutral,
         Icons.celebration,
       ),
-      _ when day.isDayOff => ('Day off', AppTheme.neutral, Icons.weekend),
+      _ when day.isDayOff => (t.statusDayOff, colors.neutral, Icons.weekend),
       _ when !day.isWorkingDay => (
-        'Weekend',
-        AppTheme.neutral,
+        t.statusWeekend,
+        colors.neutral,
         Icons.weekend_outlined,
       ),
       _ when day.shift != null => (
         day.shift!.window,
-        AppTheme.present,
+        colors.present,
         Icons.schedule,
       ),
-      _ => ('No shift', AppTheme.neutral, Icons.remove),
+      _ => (t.scheduleNoShift, colors.neutral, Icons.remove),
     };
 
     return ListTile(
@@ -197,13 +227,14 @@ class _ScheduleRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              day.weekday,
+              // The server writes this one in English, whoever is reading.
+              Fmt.weekdayNamed(t, day.weekday),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             Text(
-              Fmt.shortDate(day.date),
+              Fmt.shortDate(t, day.date),
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ],
@@ -238,9 +269,9 @@ class _ScheduleRow extends StatelessWidget {
                 color: AppTheme.brand.withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'rostered',
-                style: TextStyle(
+              child: Text(
+                t.scheduleRostered,
+                style: const TextStyle(
                   fontSize: 10.5,
                   color: AppTheme.brandDeep,
                   fontWeight: FontWeight.w700,

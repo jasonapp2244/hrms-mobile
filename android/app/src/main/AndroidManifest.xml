@@ -24,6 +24,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
+    <!-- The optional biometric lock (B1.3). Nothing about it is asked for at
+         install time and the app is fully usable with it switched off, so this
+         is not declared as a <uses-feature> — requiring the hardware would
+         hide the app in the Play Store from every device without a sensor. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+
     <!-- Backup stays on, but the sign-in token is carved out of it. The two rule
          files are read by different Android versions and both are required —
          see the comments in each. The privacy policy promises this behaviour,

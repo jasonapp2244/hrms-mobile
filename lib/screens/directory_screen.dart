@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api_client.dart';
+import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -74,10 +75,15 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
       setState(() {
         _error = e.error == 'forbidden'
-            ? 'This account has no employee record, so the directory is unavailable.'
-            : e.displayMessage;
+            ? t.directoryNoEmployeeRecord
+            : e.text(t);
         _loading = false;
       });
     }
@@ -85,12 +91,13 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
 
   Future<void> _launch(String scheme, String value) async {
     final uri = Uri(scheme: scheme, path: value);
+    final t = context.t;
 
     if (!await launchUrl(uri) && mounted) {
       // No mail client, or no dialler on a tablet. Say what could not be
       // opened rather than letting the tap look ignored.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nothing on this device opens $value.')),
+        SnackBar(content: Text(t.directoryNoHandler(value))),
       );
     }
   }
@@ -98,10 +105,11 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
   @override
   Widget build(BuildContext context) {
     final directory = _directory;
+    final t = context.t;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Colleagues'),
+        title: Text(t.directoryTitle),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(62),
           child: Padding(
@@ -112,12 +120,16 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _load(),
               decoration: InputDecoration(
-                hintText: 'Search by name or code',
+                hintText: t.directorySearchHint,
                 prefixIcon: const Icon(Icons.search),
                 isDense: true,
                 suffixIcon: _search.text.isEmpty
                     ? null
                     : IconButton(
+                        // The only icon-only control in the app without one.
+                        // A screen reader announces "button" and nothing else
+                        // without it (B6.4).
+                        tooltip: t.directoryClearSearch,
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _search.clear();
@@ -136,10 +148,12 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
         child: directory == null || directory.people.isEmpty
             ? EmptyState(
                 icon: Icons.people_outline,
-                title: _search.text.isEmpty ? 'Nobody to show' : 'No match',
+                title: _search.text.isEmpty
+                    ? t.directoryEmptyTitle
+                    : t.directoryNoMatchTitle,
                 subtitle: _search.text.isEmpty
-                    ? 'Colleagues appear here once HR has added them.'
-                    : 'Nobody here matches "${_search.text.trim()}".',
+                    ? t.directoryEmptySubtitle
+                    : t.directoryNoMatchSubtitle(_search.text.trim()),
               )
             : RefreshIndicator(
                 onRefresh: _load,
@@ -152,12 +166,12 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     if (i >= directory.people.length) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
                         child: Text(
-                          'More colleagues than fit on one page — search to narrow it.',
+                          t.directoryMorePages,
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12.5),
+                          style: const TextStyle(fontSize: 12.5),
                         ),
                       );
                     }
@@ -192,6 +206,8 @@ class _PersonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final t = context.t;
 
     final where = [
       if (person.designation != null) person.designation!,
@@ -216,8 +232,8 @@ class _PersonCard extends StatelessWidget {
                   ? null
                   : Text(
                       person.initials,
-                      style: const TextStyle(
-                        color: AppTheme.brandDeep,
+                      style: TextStyle(
+                        color: colors.accent,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -244,8 +260,8 @@ class _PersonCard extends StatelessWidget {
                   Text(
                     [
                       if (person.office != null) person.office!,
-                      if (person.workMode == 'wfh') 'Remote',
-                      if (person.workMode == 'hybrid') 'Hybrid',
+                      if (person.workMode == 'wfh') t.directoryRemote,
+                      if (person.workMode == 'hybrid') t.directoryHybrid,
                     ].join(' · '),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: theme.colorScheme.outline,
@@ -261,13 +277,13 @@ class _PersonCard extends StatelessWidget {
               if (person.phone != null)
                 IconButton(
                   icon: const Icon(Icons.phone_outlined, size: 21),
-                  tooltip: 'Call',
+                  tooltip: t.directoryCall,
                   onPressed: () => onCall(person.phone!),
                 ),
               if (person.email != null)
                 IconButton(
                   icon: const Icon(Icons.mail_outline, size: 21),
-                  tooltip: 'Email',
+                  tooltip: t.directoryEmail,
                   onPressed: () => onEmail(person.email!),
                 ),
             ],
