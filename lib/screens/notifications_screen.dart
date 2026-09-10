@@ -321,6 +321,10 @@ class _NotificationCard extends StatelessWidget {
         'schedule_updated' => Icons.calendar_month,
         'document_expiring' => Icons.description_outlined,
         'late_arrivals' => Icons.groups_outlined,
+        // B5.5. The one row here whose words a person typed rather than the
+        // system, and it earns its own mark for that: an announcement sitting
+        // in a list of leave decisions and clock reminders is easy to read past.
+        'announcement' => Icons.campaign_outlined,
         _ => Icons.notifications_none,
       };
 
@@ -329,6 +333,10 @@ class _NotificationCard extends StatelessWidget {
         'leave.rejected' => colors.absent,
         final String type when type.startsWith('attendance.') => colors.late,
         'document_expiring' => colors.late,
+        // The brand colour rather than a status colour: an announcement is the
+        // company speaking, not a verdict on anybody's attendance, and the
+        // status palette is spoken for.
+        'announcement' => colors.accent,
         _ => colors.neutral,
       };
 }
