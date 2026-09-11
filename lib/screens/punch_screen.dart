@@ -721,7 +721,7 @@ class _PunchButton extends StatelessWidget {
           // #F26522 at 21px semibold is large text by WCAG, which asks 3:1 of
           // it — 3.15 clears that. The ordinary 16px buttons do not, which is
           // why `primary` is the deeper orange and this one names its own.
-          backgroundColor: clockingIn ? AppTheme.brand : AppTheme.brandDeep,
+          backgroundColor: clockingIn ? AppTheme.brandOf(context) : AppTheme.brandDeepOf(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
@@ -859,8 +859,8 @@ class _BreakButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           // On a break the control that ends it is the live one, so it gets the
           // colour. Starting one is unremarkable and stays quiet.
-          foregroundColor: starting ? null : AppTheme.brandDeep,
-          side: starting ? null : const BorderSide(color: AppTheme.brandDeep, width: 1.6),
+          foregroundColor: starting ? null : AppTheme.brandDeepOf(context),
+          side: starting ? null : BorderSide(color: AppTheme.brandDeepOf(context), width: 1.6),
           // The theme's 48 would pin this back under the 56 above.
           minimumSize: const Size.fromHeight(56),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

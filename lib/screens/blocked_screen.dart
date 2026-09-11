@@ -36,7 +36,7 @@ class BlockedScreen extends StatelessWidget {
                   Icon(
                     updating ? Icons.system_update : Icons.build_circle_outlined,
                     size: 56,
-                    color: AppTheme.brand,
+                    color: AppTheme.brandOf(context),
                   ),
                   const SizedBox(height: 24),
                   Text(

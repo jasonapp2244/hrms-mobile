@@ -134,7 +134,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              const Icon(Icons.schedule, color: AppTheme.brand),
+                              Icon(Icons.schedule, color: AppTheme.brandOf(context)),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -266,14 +266,14 @@ class _ScheduleRow extends StatelessWidget {
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.brand.withValues(alpha: 0.13),
+                color: AppTheme.brandOf(context).withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 t.scheduleRostered,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10.5,
-                  color: AppTheme.brandDeep,
+                  color: AppTheme.brandDeepOf(context),
                   fontWeight: FontWeight.w700,
                 ),
               ),

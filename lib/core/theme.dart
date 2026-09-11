@@ -2,42 +2,99 @@ import 'package:flutter/material.dart';
 
 import '../l10n/generated/app_localizations.dart';
 
-/// The app's visual language, taken from the web dashboard rather than invented
-/// — #F26522 is the orange the logo and favicon were recoloured to, so the
-/// phone and the browser read as one product.
+/// The app's visual language, taken from the KEMP mark rather than invented —
+/// the same navy and gold as the icon, the web dashboard and the favicon, so
+/// the phone and the browser read as one product.
+///
+/// **The navy and the gold are not interchangeable, and that is the whole
+/// reason this class has four colours rather than one.** Navy is dark
+/// (relative luminance 0.054) and gold is bright (0.70), so each is legible on
+/// exactly the surfaces the other is not: navy carries white text and vanishes
+/// on a dark background, gold carries black text and vanishes on white. The
+/// orange these replaced sat between the two and was legible on neither —
+/// white on it measured 3.15:1 and failed on every button in the app.
 class AppTheme {
-  /// The brand orange itself. **Identity, not text** — at 3.15:1 on white it
-  /// clears the 3:1 that WCAG asks of large text and of graphics, and nothing
-  /// like the 4.5:1 that body text needs. So it draws the splash mark, the
-  /// focused field border and the 21px Check-in button, and never a caption.
-  static const Color brand = Color(0xFFF26522);
+  /// KEMP navy — the plate the K sits on, and the interactive colour in light
+  /// mode. White on it is 10.1:1, so unlike the orange it replaced this one
+  /// **can** carry body text, and it is `primary` directly rather than needing
+  /// a darkened twin.
+  static const Color navy = Color(0xFF033C93);
 
-  /// The same orange taken down to where white text on it reads: 4.72:1. It is
-  /// `primary` in light mode for exactly that reason — the seeded scheme put
-  /// white on #F26522, which is 3.15:1 and fails on every ordinary button.
-  static const Color brandDeep = Color(0xFFC44E14);
+  /// The bottom of the mark's gradient. Used where two navy controls sit
+  /// together and have to be told apart — the punch button's checked-in state
+  /// against its checked-out one, and the break button's outline. White on it
+  /// is 15.8:1.
+  static const Color navyDeep = Color(0xFF01174B);
+
+  /// KEMP gold — the swoosh. **Identity and dark-mode primary, never text on a
+  /// light surface**: on white it measures 1.4:1, which fails even the 3:1 WCAG
+  /// asks of a graphic. On navy it is 9.4:1 and on near-black 15:1, so it is
+  /// `primary` in dark mode with [onGold] on it, and it draws the mark on any
+  /// dark ground. `accessibility_test.dart` pins both halves of that.
+  static const Color gold = Color(0xFFFDD810);
+
+  /// What sits on [gold]. Near-black rather than pure black, to echo the mark's
+  /// own deep navy rather than introduce a fifth colour.
+  static const Color onGold = Color(0xFF1A1500);
+
+  /// The identity colour for the surface it is about to be drawn on: navy on a
+  /// light background, gold on a dark one.
+  ///
+  /// A single constant cannot do this job, which is why `brand` is gone. Navy
+  /// on the dark scaffold (#0F1419) is 1.4:1 — a splash mark nobody can see —
+  /// and gold on white is the same number the other way up. Every caller that
+  /// draws the mark, an accent icon or a focus ring comes through here.
+  static Color brandOf(BuildContext context) =>
+      brandFor(Theme.of(context).brightness);
+
+  /// As [brandOf], for a theme being built or a test with no context.
+  static Color brandFor(Brightness brightness) =>
+      brightness == Brightness.dark ? gold : navy;
+
+  /// Gold taken down far enough to be visibly a second colour beside [gold]
+  /// while still carrying [onGold] at 8.8:1. The dark-mode counterpart of
+  /// [navyDeep].
+  static const Color goldDeep = Color(0xFFD4B200);
+
+  /// The *second* brand colour for this surface — [navyDeep] on light,
+  /// [goldDeep] on dark.
+  ///
+  /// Exists because two controls on the clock screen are both brand-coloured
+  /// and mean opposite things: Check In against Check Out, and the button that
+  /// ends a break. Telling them apart by shade only works if the shade moves
+  /// with the theme; a fixed navy would be an invisible button on a dark
+  /// handset, and near-black-on-navy for its label.
+  static Color brandDeepOf(BuildContext context) =>
+      brandDeepFor(Theme.of(context).brightness);
+
+  /// As [brandDeepOf], without a context.
+  static Color brandDeepFor(Brightness brightness) =>
+      brightness == Brightness.dark ? goldDeep : navyDeep;
 
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
-    // fromSeed harmonises the seed into a tonal palette, which turns #F26522
-    // into a muted brown for `primary` — recognisably not the brand. The seed
+    // fromSeed harmonises the seed into a tonal palette, which turns the navy
+    // into a muted slate for `primary` — recognisably not the brand. The seed
     // still earns its keep for every secondary and container tone, so keep it
-    // and put the exact brand colour back on the roles people actually see.
-    final seeded = ColorScheme.fromSeed(seedColor: brand, brightness: brightness);
+    // and put the exact brand colours back on the roles people actually see.
+    final seeded = ColorScheme.fromSeed(seedColor: navy, brightness: brightness);
 
     final scheme = seeded.copyWith(
-      // Not `brand` in light mode, and not white-on-orange in dark. A filled
-      // button's label is 16px semibold — ordinary text by WCAG's reckoning,
-      // so it needs 4.5:1. White on #F26522 is 3.15 and white on the dark
-      // #FF7B3C is 2.58; both failed on every primary button in the app.
-      // #C44E14 carries white at 4.72, and near-black on #FF7B3C is 8.15,
-      // which is also what a Material dark scheme does with a light primary.
-      primary: brightness == Brightness.light ? brandDeep : const Color(0xFFFF7B3C),
-      onPrimary: brightness == Brightness.light ? Colors.white : const Color(0xFF1B0F08),
-      // Neutral surfaces rather than the seed's orange-tinted ones: an
-      // orange wash behind every text field reads as a validation state.
+      // A filled button's label is 16px semibold — ordinary text by WCAG's
+      // reckoning, so it needs 4.5:1, and this pair is the one that decides
+      // whether every button in the app passes.
+      //
+      // The two themes take opposite halves of the mark. Light mode is white
+      // on navy at 10.1:1. Dark mode is near-black on gold at 15:1 — navy on
+      // the dark scaffold would be 1.4:1, a button you cannot see, and a light
+      // primary carrying a dark label is what a Material dark scheme does
+      // anyway. Both are a long way clear of the 4.5 the old orange missed.
+      primary: brightness == Brightness.light ? navy : gold,
+      onPrimary: brightness == Brightness.light ? Colors.white : onGold,
+      // Neutral surfaces rather than the seed's navy-tinted ones: a coloured
+      // wash behind every text field reads as a validation state.
       surface: brightness == Brightness.light
           ? const Color(0xFFFFFFFF)
           : const Color(0xFF161C22),
@@ -101,7 +158,9 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: brand, width: 2),
+          // Not const any more: the focus ring has to be gold on a dark form
+          // and navy on a light one, or it is a 1.4:1 outline on one of them.
+          borderSide: BorderSide(color: brandFor(brightness), width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
@@ -155,9 +214,12 @@ class AppColors {
   /// A weekend, a holiday, a day off — nothing to answer for.
   final Color neutral;
 
-  /// The brand orange where it has to be *read* rather than seen: small labels
-  /// on a tinted chip. [AppTheme.brandDeep] is 4.0:1 on its own 15% tint, so
-  /// the 10px "rostered" pill and the avatar initials needed one step darker.
+  /// The brand colour where it has to be *read* rather than seen: small labels
+  /// on a tinted chip — the 10px "rostered" pill, the avatar initials.
+  ///
+  /// Light mode is the navy itself, which needs no darkened twin the way the
+  /// old orange did: it is 8.6:1 on its own 15% tint. Dark mode is the gold,
+  /// for the same reason the dark primary is.
   final Color accent;
 
   static const _light = AppColors._(
@@ -168,7 +230,7 @@ class AppColors {
     absent: Color(0xFFA13E36),
     leave: Color(0xFF33609D),
     neutral: Color(0xFF566069),
-    accent: Color(0xFFA03F10),
+    accent: AppTheme.navy,
   );
 
   static const _dark = AppColors._(
@@ -177,7 +239,7 @@ class AppColors {
     absent: Color(0xFFD78D87),
     leave: Color(0xFF7FA4D6),
     neutral: Color(0xFF9AA3AC),
-    accent: Color(0xFFFF9E6B),
+    accent: AppTheme.gold,
   );
 
   static AppColors of(BuildContext context) =>

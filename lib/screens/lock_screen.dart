@@ -94,7 +94,7 @@ class _LockScreenState extends State<LockScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.lock_outline, size: 56, color: AppTheme.brand),
+                  Icon(Icons.lock_outline, size: 56, color: AppTheme.brandOf(context)),
                   const SizedBox(height: 24),
                   Text(
                     t.lockScreenTitle,

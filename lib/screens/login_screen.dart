@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.access_time_filled, size: 56, color: AppTheme.brand),
+                    Icon(Icons.access_time_filled, size: 56, color: AppTheme.brandOf(context)),
                     const SizedBox(height: 24),
                     Text(
                       t.appTitle,

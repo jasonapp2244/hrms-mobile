@@ -743,7 +743,7 @@ class _TeamRosterDayRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.brand.withValues(alpha: 0.13),
+                color: AppTheme.brandOf(context).withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(

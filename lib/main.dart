@@ -212,14 +212,16 @@ class _Root extends StatelessWidget {
     // Hold the splash while the token is verified against /auth/me. Showing the
     // login screen first would flash it at somebody already signed in.
     if (session.isRestoring) {
-      return const Scaffold(
+      // Not const: the splash mark is navy on a light handset and gold on a
+      // dark one, which a compile-time colour cannot express.
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.access_time_filled, size: 52, color: AppTheme.brand),
-              SizedBox(height: 20),
-              SizedBox(
+              Icon(Icons.access_time_filled, size: 52, color: AppTheme.brandOf(context)),
+              const SizedBox(height: 20),
+              const SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(strokeWidth: 2.4),

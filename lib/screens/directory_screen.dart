@@ -223,7 +223,7 @@ class _PersonCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: AppTheme.brand.withValues(alpha: 0.15),
+              backgroundColor: AppTheme.brandOf(context).withValues(alpha: 0.15),
               // A photo when there is one, initials when there is not — the
               // grey silhouette repeated down a list reads worse than either.
               backgroundImage:

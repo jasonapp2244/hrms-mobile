@@ -239,7 +239,7 @@ class _BalanceCard extends StatelessWidget {
               width: 4,
               height: 40,
               decoration: BoxDecoration(
-                color: _color(balance.colorHex) ?? AppTheme.brand,
+                color: _color(balance.colorHex) ?? AppTheme.brandOf(context),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -642,7 +642,7 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(t.leaveHalfDay),
                 value: _halfDay,
-                activeThumbColor: AppTheme.brand,
+                activeThumbColor: AppTheme.brandOf(context),
                 onChanged: (v) => setState(() => _halfDay = v),
               ),
               if (_halfDay)

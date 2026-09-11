@@ -189,7 +189,7 @@ class _Card extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 16),
-          Icon(card.icon, size: 72, color: AppTheme.brand),
+          Icon(card.icon, size: 72, color: AppTheme.brandOf(context)),
           const SizedBox(height: 32),
           Text(
             card.title,

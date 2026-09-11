@@ -149,25 +149,88 @@ void main() {
       }
     });
 
-    test('the brand orange stays off body text', () {
-      // #F26522 is 3.15:1 on white: fine for the 21px Check-in label, the
-      // splash mark and a focus ring, and nowhere near enough for a caption.
-      // Pinned so that nobody promotes it to `primary` again without seeing
-      // this fail.
+    test('the gold stays off light surfaces and the navy carries text', () {
+      // This test used to say "the brand orange stays off body text", and
+      // pinned that orange between 3.0 and 4.5 on white — it was strong enough
+      // to be a graphic and too weak to be a caption. The KEMP palette breaks
+      // that shape completely, so the assertions are rewritten rather than
+      // relaxed: navy is now *stronger* than the old bound, and the weak
+      // colour is the gold, which is weaker than the old one ever was.
+      const white = Color(0xFFFFFFFF);
+
+      // Navy replaces both the old brand and its darkened twin. 10.1:1 on
+      // white, so it needs no second colour to be readable and is `primary`
+      // directly.
       expect(
-        _contrast(AppTheme.brand, const Color(0xFFFFFFFF)),
-        lessThan(bodyText),
+        _contrast(AppTheme.navy, white),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'navy on white',
       );
       expect(
-        _contrast(AppTheme.brand, const Color(0xFFFFFFFF)),
-        greaterThanOrEqualTo(3.0),
+        _contrast(AppTheme.navyDeep, white),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'navyDeep on white',
       );
 
-      // And the deeper one, which is what buttons use, does carry text.
+      // Gold on white is about 1.4:1 — under even the 3:1 asked of a graphic.
+      // Pinned as a FAILURE so that nobody paints a caption, an icon or a
+      // border with it on a light surface: if a future change makes this pass,
+      // the gold has been altered and every dark-mode pairing below needs
+      // re-measuring.
       expect(
-        _contrast(AppTheme.brandDeep, const Color(0xFFFFFFFF)),
-        greaterThanOrEqualTo(bodyText),
+        _contrast(AppTheme.gold, white),
+        lessThan(3.0),
+        reason: 'gold must never be drawn on a light surface',
       );
+
+      // Which is exactly why the two are resolved by brightness rather than
+      // being one constant. Each must carry text on the scaffold it is drawn
+      // on: navy on the light one, gold on the dark one.
+      expect(
+        _contrast(AppTheme.brandFor(Brightness.light), const Color(0xFFF7F8FA)),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'light brand on the light scaffold',
+      );
+      expect(
+        _contrast(AppTheme.brandFor(Brightness.dark), const Color(0xFF0F1419)),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'dark brand on the dark scaffold',
+      );
+
+      // And the second brand colour, which the punch button and the break
+      // button use to mean the opposite of the first one.
+      expect(
+        _contrast(AppTheme.brandDeepFor(Brightness.light), const Color(0xFFF7F8FA)),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'light brandDeep on the light scaffold',
+      );
+      expect(
+        _contrast(AppTheme.brandDeepFor(Brightness.dark), const Color(0xFF0F1419)),
+        greaterThanOrEqualTo(bodyText),
+        reason: 'dark brandDeep on the dark scaffold',
+      );
+
+      // The punch button paints its own background and inherits onPrimary for
+      // the label, so both brand shades have to carry onPrimary in both
+      // themes — the one pairing a scheme-level check cannot see.
+      for (final brightness in Brightness.values) {
+        final onPrimary = (brightness == Brightness.light
+                ? AppTheme.light()
+                : AppTheme.dark())
+            .colorScheme
+            .onPrimary;
+
+        expect(
+          _contrast(onPrimary, AppTheme.brandFor(brightness)),
+          greaterThanOrEqualTo(bodyText),
+          reason: '${brightness.name}: punch button label on brand',
+        );
+        expect(
+          _contrast(onPrimary, AppTheme.brandDeepFor(brightness)),
+          greaterThanOrEqualTo(bodyText),
+          reason: '${brightness.name}: punch button label on brandDeep',
+        );
+      }
     });
   });
 
