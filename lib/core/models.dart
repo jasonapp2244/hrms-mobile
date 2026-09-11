@@ -654,6 +654,48 @@ class HistoryTotals {
       );
 }
 
+/// The personal attendance score and on-time streak (B3.5).
+///
+/// Two numbers with deliberately different shapes, and the difference is worth
+/// keeping straight when reading this: [score] answers for the window on
+/// screen and is computed by the server from the very rows below it, while
+/// [streak] ignores the window entirely — "eleven days" has to mean eleven
+/// days, not eleven of the last thirty.
+class AttendanceScore {
+  AttendanceScore({
+    required this.ontimeDays,
+    required this.obligedDays,
+    required this.streak,
+    this.score,
+  });
+
+  /// Percent, 0–100, or **null when nobody was expected in** — a window of
+  /// weekends, or a fortnight of booked leave. Null is not zero: zero would
+  /// read as a failure, and the screen shows no score at all instead.
+  final int? score;
+
+  /// Days in the window they made on time.
+  final int ontimeDays;
+
+  /// Days in the window they were meant to be here at all. The denominator,
+  /// and the number that makes the score explicable rather than magic.
+  final int obligedDays;
+
+  /// Consecutive days arrived on time, counting back from today. Weekends,
+  /// holidays and booked leave neither break it nor extend it.
+  final int streak;
+
+  bool get hasScore => score != null;
+
+  factory AttendanceScore.fromJson(Map<String, dynamic> j) => AttendanceScore(
+        // Absent or null both mean "no score", which is a real answer here.
+        score: j['score'] == null ? null : _toInt(j['score']),
+        ontimeDays: _toInt(j['ontime_days']),
+        obligedDays: _toInt(j['obliged_days']),
+        streak: _toInt(j['streak']),
+      );
+}
+
 // ---------------------------------------------------------------------------
 // Leave
 // ---------------------------------------------------------------------------

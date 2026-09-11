@@ -263,6 +263,43 @@
     "historyEmptyTitle": "Nothing recorded yet",
     "historyEmptySubtitle": "Your attendance will appear here once you clock in.",
     "historyNoEmployeeRecord": "This account has no employee record, so it has no attendance.",
+    "historyScoreHeading": "YOUR SCORE",
+    "@historyScoreHeading": {
+        "description": "Heading over the attendance score card. Upper case in English; a translator should use whatever their language does for a small heading."
+    },
+    "historyScoreOutOf": "{ontime} of {obliged} days on time",
+    "@historyScoreOutOf": {
+        "description": "Explains the score underneath it, so the number is never a figure nobody can account for. {ontime} is days arrived on time, {obliged} the days they were expected at all — weekends, holidays and booked leave are not counted in either.",
+        "placeholders": {
+            "ontime": {
+                "type": "int"
+            },
+            "obliged": {
+                "type": "int"
+            }
+        }
+    },
+    "historyScoreNone": "No score yet",
+    "@historyScoreNone": {
+        "description": "Shown instead of a number when nobody was expected in during the window — a run of weekends, or a fortnight of booked leave. Never show zero for this: zero reads as a failure."
+    },
+    "historyScoreNoneWhy": "Nobody was expected in during this period.",
+    "@historyScoreNoneWhy": {
+        "description": "Sits under historyScoreNone and says why there is no number."
+    },
+    "historyStreak": "{days, plural, =0{No streak} =1{1 day in a row} other{{days} days in a row}}",
+    "@historyStreak": {
+        "description": "The on-time streak. Counts back from today and ignores the date range on screen, because a streak is not a property of a window. Weekends, holidays and approved leave neither break it nor extend it.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "historyStreakCaption": "On time, counting back from today",
+    "@historyStreakCaption": {
+        "description": "Small line under the streak explaining what it counts."
+    },
     "historyStatPresent": "Present",
     "historyStatLate": "Late",
     "historyStatLeave": "Leave",

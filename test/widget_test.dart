@@ -175,6 +175,48 @@ void main() {
     });
   });
 
+  group('AttendanceScore', () {
+    test('reads the block the history endpoint sends', () {
+      final score = AttendanceScore.fromJson({
+        'score': 93,
+        'ontime_days': 14,
+        'obliged_days': 15,
+        'streak': 6,
+      });
+
+      expect(score.score, 93);
+      expect(score.hasScore, isTrue);
+      expect(score.ontimeDays, 14);
+      expect(score.obligedDays, 15);
+      expect(score.streak, 6);
+    });
+
+    test('a null score is not a zero one', () {
+      // Nobody was expected in — a run of weekends, or a fortnight booked off.
+      // Zero would read as a failure, and the card shows no number instead.
+      final score = AttendanceScore.fromJson({
+        'score': null,
+        'ontime_days': 0,
+        'obliged_days': 0,
+        'streak': 4,
+      });
+
+      expect(score.score, isNull);
+      expect(score.hasScore, isFalse);
+
+      // And the streak is still real: it does not belong to the window.
+      expect(score.streak, 4);
+    });
+
+    test('a server that omits the key entirely is not a crash', () {
+      final score = AttendanceScore.fromJson(const {});
+
+      expect(score.hasScore, isFalse);
+      expect(score.streak, 0);
+      expect(score.obligedDays, 0);
+    });
+  });
+
   group('TodayStatus', () {
     test('defaults can_check to true when the server omits it', () {
       final today = TodayStatus.fromJson({'date': '2026-08-04', 'next_action': 'in'});

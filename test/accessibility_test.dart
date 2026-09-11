@@ -11,6 +11,7 @@ import 'package:attendance/core/session.dart';
 import 'package:attendance/core/theme.dart';
 import 'package:attendance/main.dart';
 import 'package:attendance/screens/blocked_screen.dart';
+import 'package:attendance/screens/history_screen.dart';
 import 'package:attendance/screens/lock_screen.dart';
 import 'package:attendance/screens/login_screen.dart';
 import 'package:attendance/screens/onboarding_screen.dart';
@@ -208,6 +209,7 @@ void main() {
     /// that reaches the cache hangs the run rather than failing it.
     Future<Session> offlineSession(WidgetTester tester, {
       Map<String, dynamic>? today,
+      Map<String, dynamic>? history,
     }) async {
       late Session session;
 
@@ -216,6 +218,9 @@ void main() {
         await store.write(OfflineCache.keyProfile, employee());
         if (today != null) {
           await store.write(OfflineCache.keyToday, today);
+        }
+        if (history != null) {
+          await store.write(OfflineCache.historyKey(30), history);
         }
 
         final queue = PunchQueue(directory: dir);
@@ -291,6 +296,101 @@ void main() {
 
       await at(tester, largest, session,
           PunchScreen(visible: ValueNotifier<bool>(true)));
+
+      session.dispose();
+    });
+
+    testWidgets('the history screen, score card and all (B3.5)',
+        (tester) async {
+      // Seeded through the cache rather than a stub server, the same way the
+      // clock screen is: the mock client throws, the screen falls back, and
+      // what gets drawn is the real card with real numbers in it.
+      final session = await offlineSession(tester, history: {
+        'from': '2026-08-03',
+        'to': '2026-08-07',
+        'days': [
+          {
+            'date': '2026-08-07',
+            'weekday': 'Fri',
+            'status': 'present',
+            'late': true,
+            'first_in': '2026-08-07T09:31:00+00:00',
+            'last_out': '2026-08-07T17:05:00+00:00',
+            'worked_minutes': 454,
+            'punches': 2,
+            'holiday': null,
+          },
+          {
+            'date': '2026-08-06',
+            'weekday': 'Thu',
+            'status': 'absent',
+            'late': false,
+            'first_in': null,
+            'last_out': null,
+            'worked_minutes': 0,
+            'punches': 0,
+            'holiday': null,
+          },
+        ],
+        'totals': {
+          'present_days': 1,
+          'late_days': 1,
+          'leave_days': 0,
+          'absent_days': 1,
+          'worked_minutes': 454,
+        },
+        // A long streak and a three-digit-free score: the two widest strings
+        // the card can hold, side by side, at twice the text size.
+        'score': {
+          'score': 50,
+          'ontime_days': 0,
+          'obliged_days': 2,
+          'streak': 128,
+        },
+      });
+
+      await at(tester, largest, session,
+          HistoryScreen(visible: ValueNotifier<bool>(true)));
+
+      session.dispose();
+    });
+
+    testWidgets('the history screen with no score to show', (tester) async {
+      // The other half of the card: "No score yet" is a longer string than any
+      // percentage, and it is the one a person sees after a fortnight off.
+      final session = await offlineSession(tester, history: {
+        'from': '2026-08-08',
+        'to': '2026-08-09',
+        'days': [
+          {
+            'date': '2026-08-09',
+            'weekday': 'Sun',
+            'status': 'weekend',
+            'late': false,
+            'first_in': null,
+            'last_out': null,
+            'worked_minutes': 0,
+            'punches': 0,
+            'holiday': null,
+          },
+        ],
+        'totals': {
+          'present_days': 0,
+          'late_days': 0,
+          'leave_days': 0,
+          'absent_days': 0,
+          'worked_minutes': 0,
+        },
+        'score': {
+          'score': null,
+          'ontime_days': 0,
+          'obliged_days': 0,
+          'streak': 0,
+        },
+      });
+
+      await at(tester, largest, session,
+          HistoryScreen(visible: ValueNotifier<bool>(true)));
 
       session.dispose();
     });
