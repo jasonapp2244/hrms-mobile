@@ -10,6 +10,7 @@ import 'package:attendance/core/punch_queue.dart';
 import 'package:attendance/core/session.dart';
 import 'package:attendance/core/theme.dart';
 import 'package:attendance/main.dart';
+import 'package:attendance/screens/approvals_screen.dart';
 import 'package:attendance/screens/blocked_screen.dart';
 import 'package:attendance/screens/history_screen.dart';
 import 'package:attendance/screens/lock_screen.dart';
@@ -461,6 +462,24 @@ void main() {
     testWidgets('the profile screen', (tester) async {
       final session = await offlineSession(tester);
       await at(tester, largest, session, const ProfileScreen());
+      session.dispose();
+    });
+
+    testWidgets('the manager team screen, which nothing pumped until now',
+        (tester) async {
+      // This sweep covered seven screens and not this one, and the gap cost
+      // exactly what it was meant to prevent: the team summary card put an
+      // unflexed label beside a 36px number and overflowed by 34px on an
+      // ordinary 390px handset — at the *default* font size, not a raised one.
+      // A manager's first screen, with a black-and-yellow bar across it, and
+      // no test anywhere rendered it.
+      //
+      // The session is offline, so every tab shows its error state rather than
+      // a board. That is the point: the chrome, the tab bar and the day
+      // navigation still have to lay out, and they are what overflowed.
+      final session = await offlineSession(tester);
+      await at(tester, largest, session,
+          ApprovalsScreen(visible: ValueNotifier<bool>(true)));
       session.dispose();
     });
 

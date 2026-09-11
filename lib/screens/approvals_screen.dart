@@ -409,6 +409,21 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
   bool _loading = true;
   String? _error;
 
+  /// How far back from today, in whole days. Never positive.
+  ///
+  /// `GET /team/attendance` has accepted a `date` since it shipped and the app
+  /// only ever asked for today, so a manager on a handset could not answer
+  /// "was she in yesterday?" — the one question that comes up when somebody is
+  /// missing this morning. The web manager area has had the same board with a
+  /// date on it all along (A10.4).
+  int _dayOffset = 0;
+
+  bool get _isToday => _dayOffset == 0;
+
+  DateTime get _date => DateUtils.dateOnly(
+        DateTime.now().add(Duration(days: _dayOffset)),
+      );
+
   @override
   ValueListenable<bool> get visibility => widget.visible;
 
@@ -430,7 +445,13 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
     });
 
     try {
-      final res = await SessionScope.read(context).api.get('/team/attendance');
+      // Today is sent explicitly rather than left to the server's default. The
+      // two agree, but a handset left open across midnight would otherwise
+      // refresh into a different day than the header claims.
+      final iso = _date.toIso8601String().substring(0, 10);
+      final res = await SessionScope.read(context)
+          .api
+          .get('/team/attendance?date=$iso');
       if (!mounted) return;
       setState(() {
         _summary = res['summary'] is Map<String, dynamic>
@@ -456,44 +477,95 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
     }
   }
 
+  void _shift(int days) {
+    // Never past today: the endpoint refuses a future date, and a control that
+    // reliably produces an error is a trap rather than a feature — the same
+    // reason the corrections date picker stops here.
+    final next = _dayOffset + days;
+    if (next > 0) return;
+
+    setState(() => _dayOffset = next);
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = context.t;
+
     return AsyncView(
       loading: _loading,
       error: _error,
       onRetry: _load,
-      child: RefreshIndicator(
-        onRefresh: _load,
-        child: _team.isEmpty
-            ? ListView(
-                children: [
-                  const SizedBox(height: 100),
-                  EmptyState(
-                    icon: Icons.groups_outlined,
-                    title: context.t.teamEmptyTitle,
-                    subtitle: context.t.teamEmptySubtitle,
-                  ),
-                ],
-              )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: [
-                  if (_summary != null) ...[
-                    _TeamSummaryCard(summary: _summary!),
-                    const SizedBox(height: 16),
-                  ],
-                  Card(
-                    child: Column(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: () => _shift(-1),
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: t.teamPreviousDay,
+                ),
+                Text(
+                  switch (_dayOffset) {
+                    0 => t.clockToday,
+                    -1 => t.teamYesterday,
+                    _ => Fmt.longDate(
+                        t,
+                        _date.toIso8601String().substring(0, 10),
+                      ),
+                  },
+                  style: theme.textTheme.titleSmall,
+                ),
+                IconButton(
+                  // Disabled rather than hidden on today, so the row does not
+                  // reflow under the finger as somebody steps back and forth.
+                  onPressed: _isToday ? null : () => _shift(1),
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: t.teamNextDay,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _team.isEmpty
+                  ? ListView(
                       children: [
-                        for (var i = 0; i < _team.length; i++) ...[
-                          if (i > 0) const Divider(height: 1),
-                          _TeamRow(member: _team[i]),
+                        const SizedBox(height: 100),
+                        EmptyState(
+                          icon: Icons.groups_outlined,
+                          title: context.t.teamEmptyTitle,
+                          subtitle: context.t.teamEmptySubtitle,
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                      children: [
+                        if (_summary != null) ...[
+                          _TeamSummaryCard(summary: _summary!),
+                          const SizedBox(height: 16),
                         ],
+                        Card(
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < _team.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _TeamRow(member: _team[i]),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -790,12 +862,20 @@ class _TeamSummaryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    t.teamOnFloorNow(summary.total),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                // Expanded, not a bare Text: the label sits beside a 36px
+                // number inside an 18px-padded card, which leaves it about
+                // 250px on a 390px handset. "of 12 on the floor now" fits;
+                // the Spanish reading of it does not, and nor does the English
+                // one at any raised font size. Unflexed it overflowed by 34px
+                // — a black-and-yellow bar across the manager's first screen.
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      t.teamOnFloorNow(summary.total),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
