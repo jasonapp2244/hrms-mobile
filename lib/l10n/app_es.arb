@@ -1,6 +1,6 @@
 {
     "@@locale": "es",
-    "appTitle": "RR. HH. y Asistencia",
+    "appTitle": "KEMP",
     "actionTryAgain": "Reintentar",
     "actionRetry": "Reintentar",
     "actionCancel": "Cancelar",
@@ -319,7 +319,7 @@
     "lockTileTitle": "Desbloquear con biometría",
     "lockTileSubtitle": "Pide tu huella o tu cara al abrir la aplicación, y cuando lleve un minuto sin usarse.",
     "lockNotTurnedOn": "No se activó: se canceló la comprobación.",
-    "lockPromptReason": "Desbloquear RR. HH. y Asistencia",
+    "lockPromptReason": "Desbloquear KEMP",
     "lockNotRecognised": "No se reconoció. Inténtalo de nuevo.",
     "lockLockedOut": "Demasiados intentos. Desbloquea el teléfono como de costumbre y vuelve a intentarlo.",
     "lockUnavailable": "Este teléfono ya no puede comprobarlo. Inicia sesión con tu contraseña.",

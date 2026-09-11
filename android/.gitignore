@@ -1,5 +1,8 @@
 gradle-wrapper.jar
 /.gradle
+# Kotlin's own incremental-build cache, written next to /.gradle by AGP 8.x.
+# Not in Flutter's template because it did not exist when that was written.
+/.kotlin
 /captures/
 /gradlew
 /gradlew.bat

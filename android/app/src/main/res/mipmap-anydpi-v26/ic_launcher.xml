@@ -6,4 +6,27 @@
           android:drawable="@drawable/ic_launcher_foreground"
           android:inset="16%" />
   </foreground>
+  <!-- Android 13+ themed icons. Without this layer the launcher has nothing to
+       recolour, so on a themed home screen this app keeps its navy tile while
+       every neighbour turns the wallpaper's colours — it reads as the one app
+       that has not been updated.
+
+       The same foreground drawable is reused deliberately: a monochrome layer
+       is tinted by the launcher and only its ALPHA is kept, so the keyed mark
+       and a purpose-drawn silhouette produce identical output. Keeping one
+       source means the themed icon cannot drift from the real one the next
+       time the brand mark changes.
+
+       The inset matches the foreground's, because Android applies the same
+       safe zone to both layers and a monochrome layer without it would be
+       cropped by the launcher's mask.
+
+       WARNING: `dart run flutter_launcher_icons` REWRITES this file and drops
+       this block — it has no monochrome support. Re-add it after every run and
+       check it survived, or the themed icon silently disappears again. -->
+  <monochrome>
+      <inset
+          android:drawable="@drawable/ic_launcher_foreground"
+          android:inset="16%" />
+  </monochrome>
 </adaptive-icon>

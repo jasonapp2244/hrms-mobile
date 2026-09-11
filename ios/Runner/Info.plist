@@ -4,11 +4,13 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- What appears under the icon on the home screen. Kept short: iOS
-	     truncates past roughly 12 characters, and "HR & Attendance" would
-	     render as "HR & Atten...". -->
+	<!-- What appears under the icon on the home screen. iOS truncates past
+	     roughly 12 characters, which is what ruled out the old "HR &
+	     Attendance" — it rendered as "HR & Atten...". The brand name is four
+	     characters and needs no shortened variant, so this and CFBundleName
+	     are now the same string. -->
 	<key>CFBundleDisplayName</key>
-	<string>HR Attendance</string>
+	<string>KEMP</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -16,7 +18,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>HR Attendance</string>
+	<string>KEMP</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -56,13 +58,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
+	<!-- No UISupportedInterfaceOrientations~ipad key. TARGETED_DEVICE_FAMILY is
+	     1 — iPhone only — so iOS would never read it, and leaving it here
+	     would be the one line in the project claiming iPad support. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

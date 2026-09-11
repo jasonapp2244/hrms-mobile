@@ -1,8 +1,8 @@
 {
     "@@locale": "en",
-    "appTitle": "HR & Attendance",
+    "appTitle": "KEMP",
     "@appTitle": {
-        "description": "The app name, on the login screen and in the OS task switcher."
+        "description": "The app name, on the login screen and in the OS task switcher. A brand name: it is NOT translated, so app_es.arb carries the same string deliberately."
     },
     "actionTryAgain": "Try again",
     "@actionTryAgain": {
@@ -919,7 +919,7 @@
     "lockTileTitle": "Unlock with biometrics",
     "lockTileSubtitle": "Ask for your fingerprint or face when the app opens, and after it has been put down for a minute.",
     "lockNotTurnedOn": "Not turned on — the check was cancelled.",
-    "lockPromptReason": "Unlock HR & Attendance",
+    "lockPromptReason": "Unlock KEMP",
     "@lockPromptReason": {
         "description": "Shown by the operating system inside its own fingerprint or face sheet."
     },

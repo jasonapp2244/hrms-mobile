@@ -6,10 +6,18 @@
   with /privacy on the server — three descriptions of the same thing, and a
   reviewer will compare them.
 
-  IMPORTANT: this file is not in the Xcode project yet. A file sitting in the
-  folder is not in the bundle. On a Mac, open ios/Runner.xcworkspace, drag
-  PrivacyInfo.xcprivacy into the Runner group, and tick the Runner target so it
-  lands in Copy Bundle Resources. Until then it ships as if absent.
+  This file IS in the Xcode project: it is a PBXFileReference in the Runner
+  group and a PBXBuildFile in the Runner target's Copy Bundle Resources phase
+  (ids F1A2B3C41D00000000000001 and ...02 in project.pbxproj). A file in the
+  folder is not in the bundle, and for a long time this one only sat in the
+  folder — Apple rejects on submission when the manifest is absent, and nothing
+  about it fails at build time, so the gap was silent.
+
+  If the Runner target is ever recreated from scratch, re-add it: open
+  ios/Runner.xcworkspace, drag PrivacyInfo.xcprivacy into the Runner group, and
+  tick the Runner target so it lands in Copy Bundle Resources. Verify with
+  `unzip -l Runner.app` on a built archive — the manifest must be at the bundle
+  root.
 
   What is declared and why:
 

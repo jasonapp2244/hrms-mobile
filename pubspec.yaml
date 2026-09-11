@@ -1,5 +1,5 @@
 name: attendance
-description: "HR & Attendance — employee app for clocking in, leave and rosters."
+description: "KEMP — Klutch Employment Management Program. Employee app for clocking in, leave and rosters."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -84,8 +84,11 @@ flutter_launcher_icons:
   # Android 8+ draws the foreground over the background and masks the pair to
   # whatever shape the launcher uses, so the mark must not carry its own
   # background — hence a separate transparent foreground and a flat colour here.
-  # #F26522 is the brand orange, the same value the web dashboard uses.
-  adaptive_icon_background: "#F26522"
+  # #052C6E is the KEMP navy, taken from the middle of the supplied artwork's
+  # gradient. The foreground is the K, the swoosh and the people with that navy
+  # keyed out, so any navy left at an anti-aliased edge lands on navy and is
+  # invisible by construction.
+  adaptive_icon_background: "#052C6E"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
 
   ios: true

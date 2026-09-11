@@ -24,6 +24,30 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
+    <!-- Both of these are REQUIRED declarations that undo a default, and
+         leaving them out is a Play Store distribution bug rather than a
+         runtime one — which is why it survived every test.
+
+         Google Play derives implied <uses-feature> entries from permissions:
+         ACCESS_FINE_LOCATION implies android.hardware.location.gps and
+         ACCESS_COARSE_LOCATION implies android.hardware.location, both as
+         **required** unless the manifest says otherwise. The store then filters
+         the listing off every device that lacks the hardware — wifi-only
+         tablets, GPS-less handsets, Chromebooks and managed devices among them.
+         Staff on those devices would simply not find the app, with no error
+         anywhere and nothing to search for.
+
+         The app must run on them, because a location is optional to a punch by
+         design: no fix, no permission and no sensor all send the punch without
+         coordinates (B2.3) rather than failing it. So the hardware is genuinely
+         not required, and this says so. -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false"/>
+
     <!-- The optional biometric lock (B1.3). Nothing about it is asked for at
          install time and the app is fully usable with it switched off, so this
          is not declared as a <uses-feature> — requiring the hardware would
@@ -35,7 +59,7 @@
          see the comments in each. The privacy policy promises this behaviour,
          so these three attributes are what keep that page honest. -->
     <application
-        android:label="HR &amp; Attendance"
+        android:label="KEMP"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
