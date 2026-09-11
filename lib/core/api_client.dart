@@ -90,7 +90,7 @@ class ApiClient {
   /// `localhost` there is the emulator itself, which serves nothing.
   ///
   /// Override for a real device or a deployed server:
-  ///   flutter run --dart-define=API_BASE=https://emp.klutchcleaning.com/api/v1
+  ///   flutter run --dart-define=API_BASE=https://hrams.devonlinetestserver.com/api/v1
   static const String baseUrl = String.fromEnvironment(
     'API_BASE',
     defaultValue: 'http://10.0.2.2:8000/api/v1',
@@ -122,7 +122,7 @@ class ApiClient {
     if (kReleaseMode && !baseUrl.startsWith('https://')) {
       throw StateError(
         'This release build would talk to "$baseUrl". Rebuild with '
-        '--dart-define=API_BASE=https://emp.klutchcleaning.com/api/v1',
+        '--dart-define=API_BASE=https://hrams.devonlinetestserver.com/api/v1',
       );
     }
   }
