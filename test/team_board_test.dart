@@ -20,15 +20,28 @@ import 'package:http/testing.dart';
 /// ever asked for today, so a manager could not answer "was she in yesterday?"
 /// from a handset. These cover the two things that can go wrong now that it
 /// can: asking for the wrong day, and asking for a day the server refuses.
+///
+/// **The mock's today is deliberately not the handset's.** Attendance is judged
+/// in the company's timezone and the phone is wherever its owner is, so the two
+/// disagree for part of every day — a phone in Karachi is already on the 12th
+/// while a New York office is still on the 11th. An earlier version of this
+/// screen built the date from `DateTime.now()` and every one of these tests
+/// passed, because the test device and the fake server shared a clock. On a
+/// real handset it asked for tomorrow and the board died on "That day has not
+/// happened yet". Keep the skew below.
 void main() {
   /// Every URL the app asked for, in order, query string and all.
   late List<String> asked;
 
-  String today() => DateTime.now().toIso8601String().substring(0, 10);
+  /// The company's today, one day behind the device running these tests —
+  /// standing in for a handset east of the office.
+  final serverToday = DateUtils.dateOnly(
+    DateTime.now().subtract(const Duration(days: 1)),
+  );
 
-  String daysAgo(int n) => DateUtils.dateOnly(
-        DateTime.now().subtract(Duration(days: n)),
-      ).toIso8601String().substring(0, 10);
+  String iso(DateTime date) => date.toIso8601String().substring(0, 10);
+
+  String serverDaysAgo(int n) => iso(serverToday.subtract(Duration(days: n)));
 
   Session managerSession() {
     asked = <String>[];
@@ -38,10 +51,16 @@ void main() {
         asked.add('${request.url.path}?${request.url.query}');
 
         if (request.url.path.contains('/team/attendance')) {
+          final requested = request.url.queryParameters['date'];
+
+          // The real endpoint answers for its own today when no date is given,
+          // and echoes whichever day it used. That echo is how the app learns
+          // what today means here.
           return http.Response(
             jsonEncode({
               'ok': true,
-              'date': request.url.queryParameters['date'],
+              'date': requested ?? iso(serverToday),
+              'timezone': 'America/New_York',
               'summary': {'headcount': 1, 'present': 1, 'late': 0, 'leave': 0, 'absent': 0, 'in_now': 1},
               'team': [
                 {
@@ -72,6 +91,9 @@ void main() {
     return Session(api: api);
   }
 
+  List<String> boardCalls() =>
+      asked.where((u) => u.contains('/team/attendance')).toList();
+
   Future<void> pumpBoard(WidgetTester tester, Session session) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -92,30 +114,49 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('it opens on today, and says so explicitly', (tester) async {
+  testWidgets('it opens on today by asking the server which day that is',
+      (tester) async {
     final session = managerSession();
     await pumpBoard(tester, session);
 
-    final board = asked.where((u) => u.contains('/team/attendance')).toList();
+    final board = boardCalls();
     expect(board, isNotEmpty, reason: 'the board never called the endpoint');
 
-    // Today is sent rather than left to the server's default: a handset left
-    // open across midnight would otherwise refresh into a day the header does
-    // not name.
-    expect(board.first, contains('date=${today()}'));
+    // No date at all on the first request. The handset does not get a vote on
+    // what today is — only the server knows the company's timezone.
+    expect(board.first, isNot(contains('date=')));
   });
 
-  testWidgets('stepping back asks for the day before', (tester) async {
+  testWidgets('stepping back asks for the day before the SERVER\'s today',
+      (tester) async {
     final session = managerSession();
     await pumpBoard(tester, session);
 
     await tester.tap(find.byIcon(Icons.chevron_left));
     await tester.pumpAndSettle();
 
+    // The regression: built from the handset's clock this would be one day
+    // behind the *device*, which here is the server's today — a day on which
+    // the board would quietly show the wrong people.
+    expect(boardCalls().last, contains('date=${serverDaysAgo(1)}'));
     expect(
-      asked.where((u) => u.contains('/team/attendance')).last,
-      contains('date=${daysAgo(1)}'),
+      boardCalls().last,
+      isNot(contains('date=${iso(DateUtils.dateOnly(DateTime.now()))}')),
+      reason: 'stepped back to the handset\'s today instead of the server\'s',
     );
+  });
+
+  testWidgets('two steps back keeps counting from the server\'s today',
+      (tester) async {
+    final session = managerSession();
+    await pumpBoard(tester, session);
+
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+
+    expect(boardCalls().last, contains('date=${serverDaysAgo(2)}'));
   });
 
   testWidgets('the forward arrow is dead on today, so no future date is ever sent',
@@ -123,7 +164,7 @@ void main() {
     final session = managerSession();
     await pumpBoard(tester, session);
 
-    final before = asked.where((u) => u.contains('/team/attendance')).length;
+    final before = boardCalls().length;
 
     // The endpoint refuses a future date with a 422. A control that reliably
     // produces an error is a trap, so this one is disabled rather than left to
@@ -131,7 +172,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
 
-    expect(asked.where((u) => u.contains('/team/attendance')).length, before);
+    expect(boardCalls().length, before);
 
     final forward = tester.widget<IconButton>(
       find.ancestor(
@@ -151,10 +192,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
 
-    // Back where it started, which is the only place the arrow switches off.
-    expect(
-      asked.where((u) => u.contains('/team/attendance')).last,
-      contains('date=${today()}'),
-    );
+    // Back where it started: today again, and today is still the server's to
+    // name, so the date comes off the request rather than being recomputed.
+    expect(boardCalls().last, isNot(contains('date=')));
   });
 }

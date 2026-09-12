@@ -145,6 +145,18 @@ class GeolocatorLocationSource implements LocationSource {
 /// Wraps a [LocationSource] with the promise the punch screen depends on: this
 /// returns, it returns quickly, and it never throws. A source that hangs past
 /// [deadline] is abandoned rather than waited on.
+///
+/// That promise holds for anything that hangs *in Dart*. It does not hold if
+/// the platform's own main thread is blocked, because then no Dart runs at all
+/// — the timer below never fires, the button stays under its spinner and the
+/// whole app is wedged. Seen for real: `geolocator`'s Android clients register
+/// an NMEA listener for every single-shot fix and tear it down with a
+/// synchronous `removeNmeaListener` on the calling thread, and that binder call
+/// blocks for as long as the system's location service holds its GNSS lock. An
+/// emulator's fake GNSS HAL deadlocks there reliably. Both geolocator Android
+/// clients do this and no plugin setting opts out, so there is nothing to fix
+/// here — this note exists so the next person reads the timeouts below as what
+/// they are, and does not lose an afternoon proving they fire.
 class PunchLocator {
   const PunchLocator({
     this.source = const NoLocationSource(),
@@ -154,8 +166,9 @@ class PunchLocator {
   final LocationSource source;
 
   /// The outer stop. Longer than the source's own fix timeout on purpose — it
-  /// covers the permission dialog and a wedged platform channel, neither of
-  /// which the source can time out for itself.
+  /// covers the permission dialog and a plugin that answers late, neither of
+  /// which the source can time out for itself. It does not cover a blocked
+  /// platform main thread; see the class doc for why nothing here could.
   final Duration deadline;
 
   Future<Coordinates?> resolve() async {

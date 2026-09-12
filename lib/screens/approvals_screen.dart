@@ -420,9 +420,23 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
 
   bool get _isToday => _dayOffset == 0;
 
-  DateTime get _date => DateUtils.dateOnly(
-        DateTime.now().add(Duration(days: _dayOffset)),
-      );
+  /// What the **server** calls today, learned from its own reply.
+  ///
+  /// Not `DateTime.now()`. Attendance is judged in the company's timezone, and
+  /// the handset is wherever its owner is: a phone on Asia/Karachi reads 12 Sep
+  /// while a New York company is still on the 11th, so asking for the handset's
+  /// today asks for a day that has not happened and the board fails with
+  /// "That day has not happened yet" — every night, for anybody east of the
+  /// office. Null until the first reply lands, which is why the first request
+  /// sends no date at all.
+  DateTime? _anchor;
+
+  /// The day on screen, or null before the server has said what today is.
+  DateTime? get _date => _anchor?.add(Duration(days: _dayOffset));
+
+  /// `yyyy-MM-dd`, the only date shape this endpoint takes.
+  static String _isoOf(DateTime date) =>
+      date.toIso8601String().substring(0, 10);
 
   @override
   ValueListenable<bool> get visibility => widget.visible;
@@ -445,15 +459,21 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
     });
 
     try {
-      // Today is sent explicitly rather than left to the server's default. The
-      // two agree, but a handset left open across midnight would otherwise
-      // refresh into a different day than the header claims.
-      final iso = _date.toIso8601String().substring(0, 10);
+      // On today, send no date and let the server name the day — it is the one
+      // that knows the company's timezone. On any other day, send the date
+      // explicitly so a board left open across midnight goes on showing the day
+      // its header claims rather than sliding silently onto another one.
+      final iso = _isToday ? null : _isoOf(_date!);
       final res = await SessionScope.read(context)
           .api
-          .get('/team/attendance?date=$iso');
+          .get('/team/attendance${iso == null ? '' : '?date=$iso'}');
       if (!mounted) return;
       setState(() {
+        // Re-read on every load of today, so a session left running for days
+        // corrects itself rather than anchoring on a date that has gone stale.
+        if (_isToday && res['date'] is String) {
+          _anchor = DateTime.tryParse(res['date'] as String) ?? _anchor;
+        }
         _summary = res['summary'] is Map<String, dynamic>
             ? TeamSummary.fromJson(res['summary'] as Map<String, dynamic>)
             : null;
@@ -481,6 +501,10 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
     // Never past today: the endpoint refuses a future date, and a control that
     // reliably produces an error is a trap rather than a feature — the same
     // reason the corrections date picker stops here.
+    // Nothing to count back from until the server has named today. The arrows
+    // are only reachable once a board has loaded, so this is belt and braces.
+    if (_anchor == null) return;
+
     final next = _dayOffset + days;
     if (next > 0) return;
 
@@ -510,13 +534,13 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
                   tooltip: t.teamPreviousDay,
                 ),
                 Text(
-                  switch (_dayOffset) {
-                    0 => t.clockToday,
-                    -1 => t.teamYesterday,
-                    _ => Fmt.longDate(
-                        t,
-                        _date.toIso8601String().substring(0, 10),
-                      ),
+                  switch ((_dayOffset, _date)) {
+                    (0, _) => t.clockToday,
+                    (-1, _) => t.teamYesterday,
+                    // Unreachable: an offset past yesterday can only be reached
+                    // through _shift, which refuses to move without an anchor.
+                    (_, null) => t.clockToday,
+                    (_, final d) => Fmt.longDate(t, _isoOf(d!)),
                   },
                   style: theme.textTheme.titleSmall,
                 ),
