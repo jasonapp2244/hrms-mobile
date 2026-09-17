@@ -8,6 +8,7 @@ import 'core/app_gate.dart';
 import 'core/l10n.dart';
 import 'core/locale.dart';
 import 'core/push.dart';
+import 'core/quick_actions.dart';
 import 'core/session.dart';
 import 'core/theme.dart';
 import 'screens/blocked_screen.dart';
@@ -35,7 +36,14 @@ Future<void> main() async {
   // isolate woken for each message would do nothing but cost battery.
   final push = await FirebasePushProvider.connect(() => Firebase.initializeApp());
 
-  runApp(HrmsApp(pushProvider: push));
+  runApp(
+    HrmsApp(
+      pushProvider: push,
+      // B2.8. The real launcher on Android and iOS; a no-op everywhere else,
+      // decided inside the provider so main() has no platform test in it.
+      quickActionProvider: const PluginQuickActionProvider(),
+    ),
+  );
 }
 
 /// Makes the [Session] reachable from any screen without threading it through
@@ -62,12 +70,21 @@ class HrmsApp extends StatefulWidget {
   const HrmsApp({
     super.key,
     this.pushProvider = const DisabledPushProvider(),
+
+    /// The launcher's long-press menu (B2.8). Injected for the same reason
+    /// [pushProvider] is — a headless test has no launcher — and defaulting to
+    /// the disabled one means every existing test keeps the behaviour it was
+    /// written against.
+    this.quickActionProvider = const DisabledQuickActionProvider(),
     this.session,
   });
 
   /// How this build receives notifications. Injected from [main] so that a
   /// widget test can drive the app without a Firebase project.
   final PushProvider pushProvider;
+
+  /// How this build offers launcher shortcuts.
+  final QuickActionProvider quickActionProvider;
 
   /// The session to run on, for the same reason [pushProvider] is injectable.
   /// Null everywhere but a test, where it is the only way to reach the parts of
@@ -84,7 +101,11 @@ class HrmsApp extends StatefulWidget {
 
 class _HrmsAppState extends State<HrmsApp> with WidgetsBindingObserver {
   late final Session _session =
-      widget.session ?? Session(pushProvider: widget.pushProvider);
+      widget.session ??
+          Session(
+            pushProvider: widget.pushProvider,
+            quickActions: widget.quickActionProvider,
+          );
 
   @override
   void initState() {

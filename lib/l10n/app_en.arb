@@ -260,6 +260,52 @@
             }
         }
     },
+    "historyViewCalendar": "Calendar view",
+    "@historyViewCalendar": {
+        "description": "Tooltip on the button that swaps the day list for a month grid."
+    },
+    "historyViewList": "List view",
+    "@historyViewList": {
+        "description": "Tooltip on the button that swaps the month grid back for the day list."
+    },
+    "historyMonthHeading": "{month} {year}",
+    "@historyMonthHeading": {
+        "description": "Heading over the totals card while the calendar is on screen, naming the month those totals cover. Upper-casing is done in the widget, not here, because not every language has a case to change.",
+        "placeholders": {
+            "month": {
+                "type": "String",
+                "example": "August"
+            },
+            "year": {
+                "type": "String",
+                "example": "2026"
+            }
+        }
+    },
+    "historyCalendarNoRecord": "No record",
+    "@historyCalendarNoRecord": {
+        "description": "The status of a calendar day the server sent nothing for — in practice a day still to come in the month that is running. Not 'absent': a day that has not happened cannot be missed."
+    },
+    "historyCalendarLate": "Late",
+    "@historyCalendarLate": {
+        "description": "Legend entry for an arrival after the shift's grace period. Capitalised, unlike historyLateFlag, because it heads a legend rather than trailing a row."
+    },
+    "historyCalendarOfflineTitle": "The calendar needs a connection",
+    "historyCalendarOfflineSubtitle": "The app asks the server which month it is rather than trusting this phone's clock, so it cannot draw one until it has signal. Pull down to try again.",
+    "historyCalendarDay": "{date}, {status}",
+    "@historyCalendarDay": {
+        "description": "What a screen reader announces for one cell of the month grid, which shows only a number and an icon.",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "4 Aug"
+            },
+            "status": {
+                "type": "String",
+                "example": "Present"
+            }
+        }
+    },
     "historyEmptyTitle": "Nothing recorded yet",
     "historyEmptySubtitle": "Your attendance will appear here once you clock in.",
     "historyNoEmployeeRecord": "This account has no employee record, so it has no attendance.",
@@ -632,6 +678,29 @@
     "leaveHalfDay": "Half day",
     "leaveMorning": "Morning",
     "leaveAfternoon": "Afternoon",
+    "leaveAttachOptional": "Attach a file (optional)",
+    "@leaveAttachOptional": {
+        "description": "Opens the file picker on the apply-for-leave sheet. Says optional in the control itself, because most leave needs no evidence and a field that looks required sends people hunting for one."
+    },
+    "leaveAttachRemove": "Remove the attached file",
+    "leaveAttachTooLarge": "That file is larger than 10 MB. Try a smaller one, or a photo instead of a scan.",
+    "@leaveAttachTooLarge": {
+        "description": "Refused on the handset rather than after the upload: ten megabytes over a phone connection is a long wait to be told no."
+    },
+    "leaveAttachUnreadable": "That file could not be read. If it lives in a cloud folder, download it to this phone first.",
+    "@leaveAttachUnreadable": {
+        "description": "Android can return a picked file with no readable local path — typically one in a cloud provider that was never downloaded."
+    },
+    "leaveAttachmentLabel": "Attached: {name}",
+    "@leaveAttachmentLabel": {
+        "description": "On a request that already carries a file. The name is shown rather than the word attachment, because a sick note and a photo of a car park are both files and only one of them needs opening.",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "sick-note.pdf"
+            }
+        }
+    },
     "leaveReasonOptional": "Reason (optional)",
     "leaveSubmit": "Submit request",
     "leaveFreeDaysNote": "Weekends and company holidays inside your dates are not charged.",
@@ -682,6 +751,32 @@
     },
     "clockStartBreak": "Start break",
     "clockEndBreak": "End break",
+    "clockBreakPaid": "Your {minutes}-minute break is paid — it stays on the clock.",
+    "@clockBreakPaid": {
+        "description": "Under the break button (A5.7). States the consequence rather than the setting: 'paid' alone leaves somebody wondering whether it affects their hours.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "clockBreakUnpaid": "A {minutes}-minute break comes off your hours.",
+    "@clockBreakUnpaid": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "clockBreakUnpaidMinimum": "{minutes} minutes comes off your hours, even if you take less.",
+    "@clockBreakUnpaidMinimum": {
+        "description": "The shift treats its break as a floor. Worth saying plainly, because under this rule cutting a break short buys nothing — which changes what people do.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
     "clockTodaysPunches": "TODAY'S PUNCHES",
     "clockLateFlag": "late",
     "clockEarlyFlag": "early",
@@ -706,6 +801,57 @@
     "clockDayOffNote": "Rostered off today",
     "clockAlreadyRecorded": "That punch is already recorded.",
     "clockAlreadyDone": "That is already recorded.",
+    "clockFenceRule": "Clock in within {radius} m of {office}.",
+    "@clockFenceRule": {
+        "description": "Shown on the Clock screen whenever a geofence applies to this employee, before any tap and without asking for a location — it is policy, not position. Absent when no fence applies, which is the default and the case for home and hybrid workers.",
+        "placeholders": {
+            "radius": {
+                "type": "String",
+                "example": "100"
+            },
+            "office": {
+                "type": "String",
+                "example": "Head Office"
+            }
+        }
+    },
+    "clockOutsideFence": "You are {distance} from {office}, outside the {radius} m check-in area. Move closer, or ask HR to record this punch for you.",
+    "@clockOutsideFence": {
+        "description": "Shown instead of sending the punch, when the app can already tell the server would refuse it. Deliberately the same sentence the server's own refusal uses, so a person who sees both does not read them as two different problems. Ends with what they can do, because that is the only part they can act on.",
+        "placeholders": {
+            "distance": {
+                "type": "String",
+                "example": "2.3 km"
+            },
+            "office": {
+                "type": "String",
+                "example": "Head Office"
+            },
+            "radius": {
+                "type": "String",
+                "example": "100"
+            }
+        }
+    },
+    "distanceMetres": "{metres} m",
+    "@distanceMetres": {
+        "description": "A short distance. Metres below a kilometre, because a fence is tens of metres wide and 0.08 km reads as nothing.",
+        "placeholders": {
+            "metres": {
+                "type": "String",
+                "example": "80"
+            }
+        }
+    },
+    "distanceKilometres": "{km} km",
+    "@distanceKilometres": {
+        "placeholders": {
+            "km": {
+                "type": "String",
+                "example": "2.3"
+            }
+        }
+    },
     "clockNoOffice": "No office is set up yet. HR needs to add one before you can clock in.",
     "clockOfflineTitle": "No connection",
     "clockOfflineBody": "Today's record cannot be read, so this screen cannot show your hours. You can still clock: the punch is kept at the time you tap it and sent as soon as there is a connection.",
@@ -741,6 +887,10 @@
     "teamTabApprovals": "Approvals",
     "teamTabInToday": "In today",
     "teamTabRoster": "Roster",
+    "teamTabLeave": "Off",
+    "@teamTabLeave": {
+        "description": "Tab label for the team leave calendar (B4.6). Deliberately not 'Leave', which on the employee's own tab bar means 'book time off' — this one only shows who is already away."
+    },
     "approvalsEmptyTitle": "Nothing waiting on you",
     "approvalsEmptySubtitle": "Requests already passed to HR leave this inbox.",
     "approvalsApproveTitle": "Approve {name}?",
@@ -888,6 +1038,41 @@
             }
         }
     },
+    "calendarMonthYear": "{month} {year}",
+    "@calendarMonthYear": {
+        "description": "The month above a calendar grid, as in \"August 2026\". Spanish inserts \"de\", which is why this is a message rather than a concatenation.",
+        "placeholders": {
+            "month": {
+                "type": "String",
+                "example": "August"
+            },
+            "year": {
+                "type": "String",
+                "example": "2026"
+            }
+        }
+    },
+    "calendarPreviousMonth": "Previous month",
+    "calendarNextMonth": "Next month",
+    "@calendarNextMonth": {
+        "description": "Tooltip on the forward arrow of a calendar grid. Live on the team leave calendar, where leave is booked ahead; disabled on the attendance calendar once it reaches the current month, which has no future to show."
+    },
+    "leaveCalendarQuietTitle": "Nobody is off this month",
+    "leaveCalendarQuietSubtitle": "Approved and pending leave for your team is drawn here.",
+    "leaveCalendarPeopleOff": "{count, plural, =1{1 person off} other{{count} people off}}",
+    "@leaveCalendarPeopleOff": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "leaveCalendarNobodyOff": "Nobody off",
+    "leaveCalendarPending": "Pending",
+    "@leaveCalendarPending": {
+        "description": "Badge on a request that is not approved yet. It is on the calendar deliberately: a month showing only granted leave is a month a manager can approve a second person onto."
+    },
+    "leaveCalendarHalfDay": "Half day",
     "profileTitle": "Profile",
     "profileNoEmployeeRecord": "This account is not linked to an employee record, so clocking, leave and schedule are unavailable. Use the web dashboard.",
     "profileDepartment": "Department",
@@ -903,6 +1088,7 @@
     "profileMyDocuments": "My documents",
     "profileColleagues": "Colleagues",
     "profileEditContact": "Edit contact details",
+    "profileEditDetails": "Home & emergency contact",
     "profileChangePassword": "Change password",
     "profileSignOut": "Sign out",
     "profileSignOutAll": "Sign out on all devices",
@@ -960,6 +1146,25 @@
     "editProfileSignInEmail": "Sign-in email",
     "editProfileEmailHelp": "Ask HR to change the address you sign in with.",
     "editProfileSaved": "Profile updated.",
+    "editDetailsTitle": "Home & emergency contact",
+    "editDetailsPrivacy": "Only you and HR can see this. Colleagues and your manager cannot.",
+    "@editDetailsPrivacy": {
+        "description": "Shown above the form. It is the plain truth about who reads these fields, and it is what makes somebody willing to fill them in — the directory withholds every one of them from a colleague, and from a manager too."
+    },
+    "editDetailsWhereYouLive": "Where you live",
+    "editDetailsAddress": "Address",
+    "editDetailsCity": "City",
+    "editDetailsCountry": "Country",
+    "editDetailsPersonalEmail": "Personal email",
+    "editDetailsPersonalEmailHelp": "Not the address you sign in with.",
+    "editDetailsEmergency": "If something happens at work",
+    "editDetailsEmergencyName": "Who to call",
+    "editDetailsEmergencyPhone": "Their phone number",
+    "editDetailsEmergencyRelation": "How you know them",
+    "editDetailsRelationHelp": "Partner, parent, friend — whoever they are to you.",
+    "@editDetailsRelationHelp": {
+        "description": "Helper under the relationship field. \"Who is Sam to them\" is the first thing asked on the day this record is read, and it is the one thing a phone number cannot answer."
+    },
     "passwordTitle": "Change password",
     "passwordCurrent": "Current password",
     "passwordNew": "New password",

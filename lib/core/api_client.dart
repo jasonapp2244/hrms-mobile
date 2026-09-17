@@ -173,6 +173,39 @@ class ApiClient {
             body: jsonEncode(body ?? const {}),
           ));
 
+  /// A form post carrying a file (B4.1).
+  ///
+  /// Separate from [post] rather than a flag on it, because almost nothing
+  /// about the two is shared: the body is a multipart stream instead of JSON,
+  /// there is no `Content-Type` to set — `MultipartRequest` writes its own,
+  /// boundary and all, and overriding it produces a request no server can parse
+  /// — and every field crosses as a string, so `is_half_day` has to be sent as
+  /// `'1'` rather than as `true`.
+  ///
+  /// The timeout is [_send]'s, which is deliberate: a leave attachment is
+  /// capped at ten megabytes and twenty seconds is enough for one on anything
+  /// worth calling a connection. A slow upload failing loudly beats one that
+  /// looks like it worked.
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required Map<String, String> fields,
+    String? filePath,
+    String fileField = 'attachment',
+  }) =>
+      _send(() async {
+        final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+          ..headers.addAll(_headers())
+          ..fields.addAll(fields);
+
+        if (filePath != null) {
+          request.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+        }
+
+        // Back to a Response so failures decode the same way they do everywhere
+        // else — a validation error on an upload is still ordinary JSON.
+        return http.Response.fromStream(await _http.send(request));
+      });
+
   Future<Map<String, dynamic>> put(
     String path, {
     Map<String, dynamic>? body,

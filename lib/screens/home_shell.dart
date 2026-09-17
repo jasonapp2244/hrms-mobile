@@ -66,18 +66,49 @@ class _HomeShellState extends State<HomeShell> {
     _detachPush();
     _session = session;
     session.push.pendingRoute.addListener(_openPendingRoute);
+    session.actions.pending.addListener(_openPendingAction);
     _foreground = session.push.foregroundMessages.listen(_announce);
 
     // A notification tapped from cold launches the app, and the tap is resolved
     // before this shell is built — so the route is already waiting rather than
     // arriving as an event. Check once on attach.
     _openPendingRoute();
+
+    // And the same for a launcher shortcut (B2.8), which is *always* this case:
+    // tapping one is how the app started.
+    _openPendingAction();
   }
 
   void _detachPush() {
     _session?.push.pendingRoute.removeListener(_openPendingRoute);
+    _session?.actions.pending.removeListener(_openPendingAction);
     _foreground?.cancel();
     _foreground = null;
+  }
+
+  /// Brings the Clock tab forward for a launcher shortcut (B2.8).
+  ///
+  /// **Switches the tab and nothing else.** The punch itself belongs to the
+  /// Clock screen, which owns the fence check, the GPS fix, the cooldown and
+  /// the offline queue — reproducing any of that here would be the second
+  /// definition of a rule this codebase keeps having to prove it only has one
+  /// of. So this does not clear the pending value; `PunchScreen` does, when it
+  /// has acted on it.
+  ///
+  /// The tab is named through [PushRoute.clock] rather than by index or by a
+  /// second `'clock'` literal: the manager tab shifts every index after it, and
+  /// the label under the icon is translated.
+  void _openPendingAction() {
+    final session = _session;
+    if (session == null || session.actions.pending.value == null || !mounted) {
+      return;
+    }
+
+    final tabs = _tabsFor(context.t, session.user);
+    final target = tabs.indexWhere((tab) => tab.id == PushRoute.clock.tabId);
+    if (target == -1) return;
+
+    _select(target, tabs);
   }
 
   /// Switches to the tab a tapped notification asked for.

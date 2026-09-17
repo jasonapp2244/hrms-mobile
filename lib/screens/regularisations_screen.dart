@@ -6,6 +6,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/sheet_padding.dart';
 
 /// Asking for the attendance record to be corrected (B3.9 / A4.13).
 ///
@@ -28,8 +29,18 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
   List<Regularisation> _requests = const [];
   List<DisputablePunch> _punches = const [];
 
+  /// The day the **server** last said the company was on.
+  ///
+  /// Null until the first reply lands. Not `DateTime.now()`: it is the line the
+  /// date picker must not offer past — see [_RaiseSheetState._pickWhen].
+  DateTime? _today;
+
   bool _loading = true;
   String? _error;
+
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
 
   @override
   void initState() {
@@ -41,6 +52,7 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -59,6 +71,7 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
             .map(DisputablePunch.fromJson)
             .where((p) => p.isCorrectable)
             .toList();
+        _today = DateTime.tryParse('${res['today']}') ?? _today;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -69,9 +82,9 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       // building, which asserts.
       final t = context.t;
       setState(() {
-        _error = e.error == 'forbidden'
-            ? t.correctionsNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.correctionsNoEmployeeRecord : e.text(t);
         _loading = false;
       });
     }
@@ -82,7 +95,7 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _RaiseSheet(punches: _punches),
+      builder: (_) => _RaiseSheet(punches: _punches, today: _today),
     );
 
     if (created == true) _load();
@@ -156,7 +169,7 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: RefreshIndicator(
           onRefresh: _load,
           child: _requests.isEmpty
@@ -307,9 +320,13 @@ class _RequestCard extends StatelessWidget {
 /// whether `attendance_log_id` is present, so the form does not have to send a
 /// mode as well — one less thing that can disagree with itself.
 class _RaiseSheet extends StatefulWidget {
-  const _RaiseSheet({required this.punches});
+  const _RaiseSheet({required this.punches, this.today});
 
   final List<DisputablePunch> punches;
+
+  /// The day the server says the company is on, or null if no reply has
+  /// carried one. See [_RaiseSheetState._pickWhen].
+  final DateTime? today;
 
   @override
   State<_RaiseSheet> createState() => _RaiseSheetState();
@@ -320,7 +337,11 @@ class _RaiseSheetState extends State<_RaiseSheet> {
 
   DisputablePunch? _disputed;
   String _type = 'in';
-  DateTime _when = DateTime.now();
+
+  /// Opens on the company's own today at the current wall clock, not on the
+  /// handset's date. A phone a few hours ahead of the company would otherwise
+  /// open this form on a day the server has not reached and will refuse.
+  late DateTime _when = _defaultWhen();
 
   bool _busy = false;
   String? _error;
@@ -332,16 +353,39 @@ class _RaiseSheetState extends State<_RaiseSheet> {
     super.dispose();
   }
 
-  Future<void> _pickWhen() async {
+  /// The company's today at the handset's wall clock.
+  ///
+  /// The date has to be the company's, because that is what the server judges.
+  /// The *time* is only a starting point the user is about to change, and the
+  /// phone's clock is as good a guess as any for it.
+  DateTime _defaultWhen() {
     final now = DateTime.now();
+    final today = widget.today;
+
+    return today == null
+        ? now
+        : DateTime(today.year, today.month, today.day, now.hour, now.minute);
+  }
+
+  Future<void> _pickWhen() async {
+    // The company's today, not the handset's. This is the line the picker must
+    // not offer past: the server refuses a correction to a time that has not
+    // happened, and on a phone even a few hours ahead the picker was offering
+    // exactly that — a date the app itself suggested and the server then
+    // rejected, which reads to the user as the app being broken.
+    final today = widget.today ?? DateTime.now();
+    final last = DateTime(today.year, today.month, today.day, 23, 59);
 
     final date = await showDatePicker(
       context: context,
-      initialDate: _when,
-      firstDate: now.subtract(const Duration(days: 92)),
-      // Not a day past today. The server refuses a correction to a time that
-      // has not happened, so offering one would be a trap.
-      lastDate: now,
+      currentDate: today,
+      // Clamped, because a sheet left open across midnight in the company's
+      // zone would otherwise hand the picker an initial date past its own
+      // lastDate, which asserts rather than degrades.
+      initialDate: _when.isAfter(last) ? last : _when,
+      firstDate: DateTime(today.year, today.month, today.day)
+          .subtract(const Duration(days: 92)),
+      lastDate: last,
     );
 
     if (date == null || !mounted) return;
@@ -401,12 +445,7 @@ class _RaiseSheetState extends State<_RaiseSheet> {
     final t = context.t;
 
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+      padding: sheetPadding(context),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

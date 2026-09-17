@@ -21,6 +21,9 @@ class QueuedPunch {
     required this.intendedType,
     this.latitude,
     this.longitude,
+    this.locationMocked,
+    this.deviceRooted,
+    this.deviceEmulator,
   });
 
   /// UTC, ISO 8601 with the `Z`. Sent verbatim, and it is also the identity of
@@ -37,11 +40,27 @@ class QueuedPunch {
   final double? latitude;
   final double? longitude;
 
+  /// What the handset said about itself **at the moment of the tap** (B2.7).
+  ///
+  /// Held with the punch rather than read again at sync time, for the same
+  /// reason `occurredAt` is: the queue exists to deliver what was true then.
+  /// Reading these on delivery would describe the phone at the moment it found
+  /// signal, which is a different phone-state and possibly a different day.
+  ///
+  /// Null throughout means *unknown*, and is omitted from the wire rather than
+  /// sent as null — the server stores null for "the client said nothing".
+  final bool? locationMocked;
+  final bool? deviceRooted;
+  final bool? deviceEmulator;
+
   Map<String, dynamic> toJson() => {
         'occurred_at': occurredAt,
         'intended_type': intendedType,
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
+        if (locationMocked != null) 'location_mocked': locationMocked,
+        if (deviceRooted != null) 'device_rooted': deviceRooted,
+        if (deviceEmulator != null) 'device_emulator': deviceEmulator,
       };
 
   /// What goes to `/attendance/sync` — deliberately without `intended_type`.
@@ -49,6 +68,9 @@ class QueuedPunch {
         'occurred_at': occurredAt,
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
+        if (locationMocked != null) 'location_mocked': locationMocked,
+        if (deviceRooted != null) 'device_rooted': deviceRooted,
+        if (deviceEmulator != null) 'device_emulator': deviceEmulator,
       };
 
   factory QueuedPunch.fromJson(Map<String, dynamic> j) => QueuedPunch(
@@ -56,6 +78,11 @@ class QueuedPunch {
         intendedType: '${j['intended_type'] ?? 'in'}',
         latitude: (j['latitude'] as num?)?.toDouble(),
         longitude: (j['longitude'] as num?)?.toDouble(),
+        // `as bool?` rather than `== true`: a key absent from a punch queued by
+        // an older build must stay unknown, not become a denial.
+        locationMocked: j['location_mocked'] as bool?,
+        deviceRooted: j['device_rooted'] as bool?,
+        deviceEmulator: j['device_emulator'] as bool?,
       );
 }
 

@@ -668,9 +668,14 @@ void main() {
         ),
       );
 
+      // `location_mocked` rides with the fix (B2.7) — it is a statement about
+      // *these* coordinates, so it is present whenever they are and absent
+      // whenever they are not. The device flags are not here because the
+      // default integrity source says nothing, which is what a test should say.
       expect(await locator.punchBody(), {
         'latitude': 40.7128,
         'longitude': -74.006,
+        'location_mocked': false,
       });
     });
 

@@ -31,6 +31,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
   bool _loading = true;
   String? _error;
 
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
+
   /// When the roster on screen was saved, or null when it came from the server
   /// just now. Drives the offline banner (B6.3).
   DateTime? _cachedAt;
@@ -53,6 +57,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
     setState(() {
       _loading = !silent;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -89,9 +94,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
       // building, which asserts.
       final t = context.t;
       setState(() {
-        _error = e.error == 'forbidden'
-            ? t.scheduleNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.scheduleNoEmployeeRecord : e.text(t);
         _cachedAt = null;
         _loading = false;
       });
@@ -108,7 +113,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: RefreshIndicator(
           onRefresh: _load,
           child: _days.isEmpty

@@ -8,6 +8,7 @@ import '../core/locale.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/sheet_padding.dart';
 import 'directory_screen.dart';
 import 'documents_screen.dart';
 
@@ -155,6 +156,16 @@ class ProfileScreen extends StatelessWidget {
             label: Text(t.profileEditContact),
           ),
           const SizedBox(height: 10),
+          // Only for somebody who has an employee record: these fields live on
+          // it, and an account without one has nothing here to write.
+          if (user.hasEmployeeRecord) ...[
+            OutlinedButton.icon(
+              onPressed: () => _editDetails(context),
+              icon: const Icon(Icons.contact_emergency_outlined),
+              label: Text(t.profileEditDetails),
+            ),
+            const SizedBox(height: 10),
+          ],
           OutlinedButton.icon(
             onPressed: () => _changePassword(context),
             icon: const Icon(Icons.lock_outline),
@@ -263,6 +274,15 @@ class ProfileScreen extends StatelessWidget {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => const _EditProfileSheet(),
+    );
+  }
+
+  Future<void> _editDetails(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _EditDetailsSheet(),
     );
   }
 }
@@ -644,12 +664,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     final t = context.t;
 
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+      padding: sheetPadding(context),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -712,6 +727,270 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 onPressed: _busy ? null : _submit,
                 // Same as everywhere else: the theme primary carries its own
                 // label at 4.72:1, and #F26522 does not (B6.4).
+                child: _busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                      )
+                    : Text(t.actionSave),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Where somebody lives, and who to call if something happens to them (B3.2).
+///
+/// **A second sheet rather than more fields on the first**, because these are a
+/// different record: [_EditProfileSheet] writes the account through
+/// `PUT /profile`, this writes the employee record through
+/// `PUT /profile/details`, and an account with no employee row can open one and
+/// not the other.
+///
+/// **Nothing here is cached, and that is deliberate.** The offline copy of
+/// `/auth/me` already carries the PII the profile screen shows; a home address
+/// and an emergency contact on a handset that may be shared, lost or handed on
+/// is a different order of disclosure, and none of it is any use without
+/// signal anyway. So the values are read live each time the sheet opens, and
+/// closing it leaves nothing behind.
+///
+/// The emergency contact has no read-only view of its own for the same reason:
+/// opening this sheet **is** how it is read.
+class _EditDetailsSheet extends StatefulWidget {
+  const _EditDetailsSheet();
+
+  @override
+  State<_EditDetailsSheet> createState() => _EditDetailsSheetState();
+}
+
+class _EditDetailsSheetState extends State<_EditDetailsSheet> {
+  /// Keyed by the field name the server uses, so prefill, submit and the
+  /// per-field error all index the same map and cannot drift apart.
+  static const _fields = [
+    'address',
+    'city',
+    'country',
+    'personal_email',
+    'emergency_contact_name',
+    'emergency_contact_phone',
+    'emergency_contact_relation',
+  ];
+
+  final _controllers = {
+    for (final field in _fields) field: TextEditingController(),
+  };
+
+  bool _loading = true;
+  bool _busy = false;
+  String? _error;
+  Map<String, String> _fieldErrors = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await SessionScope.read(context).api.get('/profile');
+      final employee = (res['employee'] as Map<String, dynamic>?) ?? const {};
+
+      if (!mounted) return;
+      setState(() {
+        for (final field in _fields) {
+          _controllers[field]!.text = '${employee[field] ?? ''}';
+        }
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
+      setState(() {
+        _loading = false;
+        _error = e.text(t);
+      });
+    }
+  }
+
+  Future<void> _submit() async {
+    // Read before the first await: neither the palette nor the strings can
+    // change mid-call, and reaching for a BuildContext after one is the lint
+    // this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _fieldErrors = const {};
+    });
+
+    try {
+      // Every field, every time — including the empty ones. An omitted key is
+      // left alone by the server, so sending only what is filled in would make
+      // clearing a field impossible: deleting an emergency contact who is no
+      // longer the right person to call has to be sayable.
+      await SessionScope.read(context).api.put('/profile/details', body: {
+        for (final field in _fields) field: _controllers[field]!.text.trim(),
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(t.editProfileSaved),
+          backgroundColor: colors.present,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _fieldErrors = {
+          for (final entry in e.fieldErrors.entries)
+            if (entry.value.isNotEmpty) entry.key: entry.value.first,
+        };
+        _error = _fieldErrors.isEmpty ? e.text(t) : null;
+      });
+    }
+  }
+
+  Widget _field(
+    String name,
+    String label, {
+    String? helper,
+    TextInputType? keyboard,
+    TextCapitalization capitalization = TextCapitalization.sentences,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _controllers[name],
+        keyboardType: keyboard,
+        textCapitalization: capitalization,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helper,
+          helperMaxLines: 2,
+          errorText: _fieldErrors[name],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final t = context.t;
+
+    return Padding(
+      padding: sheetPadding(context),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              t.editDetailsTitle,
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            // Said before the first field rather than after the last: somebody
+            // deciding whether to type a home address needs to know who reads
+            // it while they are deciding.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lock_outline, size: 16, color: colors.neutral),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    t.editDetailsPrivacy,
+                    style: theme.textTheme.bodySmall?.copyWith(color: colors.neutral),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (_error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+              )
+            else ...[
+              Text(
+                t.editDetailsWhereYouLive,
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 12),
+              _field('address', t.editDetailsAddress, maxLines: 2),
+              _field('city', t.editDetailsCity),
+              _field('country', t.editDetailsCountry),
+              _field(
+                'personal_email',
+                t.editDetailsPersonalEmail,
+                helper: t.editDetailsPersonalEmailHelp,
+                keyboard: TextInputType.emailAddress,
+                capitalization: TextCapitalization.none,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                t.editDetailsEmergency,
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 12),
+              _field(
+                'emergency_contact_name',
+                t.editDetailsEmergencyName,
+                capitalization: TextCapitalization.words,
+              ),
+              _field(
+                'emergency_contact_phone',
+                t.editDetailsEmergencyPhone,
+                keyboard: TextInputType.phone,
+              ),
+              _field(
+                'emergency_contact_relation',
+                t.editDetailsEmergencyRelation,
+                helper: t.editDetailsRelationHelp,
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: _busy ? null : _submit,
                 child: _busy
                     ? const SizedBox(
                         width: 20,
@@ -801,12 +1080,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     final t = context.t;
 
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+      padding: sheetPadding(context),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

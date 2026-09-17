@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/sheet_padding.dart';
 
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key, required this.visible});
@@ -24,6 +26,16 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
   List<LeaveRequest> _requests = const [];
   bool _loading = true;
   String? _error;
+
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
+
+  /// The day the **server** last said the company was on.
+  ///
+  /// Null until the first reply lands. Not `DateTime.now()`: the date picker
+  /// this feeds rings a day as today, and a handset is wherever its owner is.
+  DateTime? _today;
 
   @override
   ValueListenable<bool> get visibility => widget.visible;
@@ -43,6 +55,7 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
     setState(() {
       _loading = !silent;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -62,6 +75,9 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
             .whereType<Map<String, dynamic>>()
             .map(LeaveRequest.fromJson)
             .toList();
+        // The day the company is on, which is the day the date picker has to
+        // open on. Not `DateTime.now()` — see [_ApplySheet._pickRange].
+        _today = DateTime.tryParse('${results[0]['today']}') ?? _today;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -72,9 +88,9 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
       // building, which asserts.
       final t = context.t;
       setState(() {
-        _error = e.error == 'forbidden'
-            ? t.leaveNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.leaveNoEmployeeRecord : e.text(t);
         _loading = false;
       });
     }
@@ -86,7 +102,7 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ApplyLeaveSheet(balances: _balances),
+      builder: (_) => ApplyLeaveSheet(balances: _balances, today: _today),
     );
     if (created == true) _load();
   }
@@ -159,7 +175,7 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: RefreshIndicator(
           onRefresh: _load,
           child: ListView(
@@ -378,6 +394,32 @@ class _RequestCard extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            // B4.1. Named rather than labelled "attachment", and shown without
+            // a link: this is the person's own file, and the two routes that
+            // serve it are for whoever has to decide. Seeing the name is how
+            // they know it arrived.
+            if (request.attachmentName != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.attach_file,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      request.attachmentName!,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (request.decisionNote != null &&
                 request.decisionNote!.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -428,9 +470,13 @@ class _RequestCard extends StatelessWidget {
 /// 2 and not 4 — only the server knows the company's calendar. The response
 /// says what it actually cost.
 class ApplyLeaveSheet extends StatefulWidget {
-  const ApplyLeaveSheet({super.key, required this.balances});
+  const ApplyLeaveSheet({super.key, required this.balances, this.today});
 
   final List<LeaveBalance> balances;
+
+  /// The day the server says the company is on, or null if no reply has
+  /// carried one. See [_ApplyLeaveSheetState._pickRange].
+  final DateTime? today;
 
   @override
   State<ApplyLeaveSheet> createState() => _ApplyLeaveSheetState();
@@ -443,6 +489,10 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
   bool _halfDay = false;
   String _halfPeriod = 'first_half';
   final _reason = TextEditingController();
+
+  /// The supporting file, once one has been picked (B4.1). Null is the normal
+  /// case — most leave needs no evidence.
+  ({String path, String name})? _attachment;
 
   bool _busy = false;
   String? _error;
@@ -458,12 +508,22 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
       _start != null && _end != null && _ymd(_start!) == _ymd(_end!);
 
   Future<void> _pickRange() async {
-    final now = DateTime.now();
+    // The company's today, and only the handset's when nothing has told us
+    // otherwise. The picker draws a ring around whatever it is given as
+    // `currentDate`, and on a phone a few hours ahead of the company that ring
+    // sat on tomorrow — while the Clock, History and Schedule tabs all
+    // correctly showed the day before it. Somebody booking "from today" would
+    // have booked the wrong day, and every date the picker offers is a date
+    // this same screen will hand to a server that judges it in the company's
+    // zone.
+    final today = widget.today ?? DateTime.now();
+
     final picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(now.year - 1),
+      currentDate: today,
+      firstDate: DateTime(today.year - 1),
       // The API refuses anything more than two years ahead.
-      lastDate: DateTime(now.year + 2),
+      lastDate: DateTime(today.year + 2),
       initialDateRange: _start != null && _end != null
           ? DateTimeRange(start: _start!, end: _end!)
           : null,
@@ -476,6 +536,51 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
         if (!_sameDay) _halfDay = false;
       });
     }
+  }
+
+  /// What the server will accept, checked here as well (B4.1).
+  ///
+  /// Not a second rule — the same one, asked earlier. Ten megabytes over a
+  /// phone connection is a long wait to be told no, and the refusal is the same
+  /// either way.
+  static const _maxAttachmentBytes = 10 * 1024 * 1024;
+
+  static const _allowedAttachmentTypes = [
+    'pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx',
+  ];
+
+  Future<void> _pickAttachment() async {
+    final t = context.t;
+
+    // Static, not `FilePicker.platform`: version 11 made the class abstract
+    // final and moved the platform indirection behind it.
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _allowedAttachmentTypes,
+    );
+
+    if (!mounted || result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final path = file.path;
+
+    // Android can hand back an entry with no readable path — a file living in
+    // a cloud provider that was never downloaded. There is nothing to upload
+    // in that case, and saying so beats posting an empty part.
+    if (path == null) {
+      setState(() => _error = t.leaveAttachUnreadable);
+      return;
+    }
+
+    if (file.size > _maxAttachmentBytes) {
+      setState(() => _error = t.leaveAttachTooLarge);
+      return;
+    }
+
+    setState(() {
+      _attachment = (path: path, name: file.name);
+      _error = null;
+    });
   }
 
   Future<void> _submit() async {
@@ -495,16 +600,21 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
     });
 
     try {
-      final res = await SessionScope.read(context).api.post(
+      // Multipart whether or not a file is attached, rather than two code
+      // paths that have to stay in step. Every field crosses as a string, so
+      // `is_half_day` is '1' rather than true — which is what the server's
+      // `boolean()` reads anyway.
+      final res = await SessionScope.read(context).api.postMultipart(
         '/leave/requests',
-        body: {
-          'leave_type_id': _type.leaveTypeId,
+        fields: {
+          'leave_type_id': '${_type.leaveTypeId}',
           'start_date': _ymd(_start!),
           'end_date': _ymd(_end!),
-          if (_halfDay) 'is_half_day': true,
+          if (_halfDay) 'is_half_day': '1',
           if (_halfDay) 'half_day_period': _halfPeriod,
           if (_reason.text.trim().isNotEmpty) 'reason': _reason.text.trim(),
         },
+        filePath: _attachment?.path,
       );
 
       if (!mounted) return;
@@ -552,12 +662,7 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
     final t = context.t;
 
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+      padding: sheetPadding(context),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -588,6 +693,14 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
 
             DropdownButtonFormField<int>(
               initialValue: _type.leaveTypeId,
+              // A dropdown sizes itself to its widest item and does **not**
+              // wrap or clip one: leave types are named by whoever set them up,
+              // and "Compassionate / Bereavement Leave (12.5 left)" runs off
+              // the side of a phone. Expanded gives the label the full width to
+              // work with and the ellipsis takes what is still too long — the
+              // balance is on the card above and the list is one tap away, so
+              // a trimmed tail costs nothing a reader cannot recover.
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: t.leaveType,
                 errorText: _fieldErrors['leave_type_id'],
@@ -603,6 +716,7 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
                               _LeaveNum.of(b.availableDays),
                             )
                           : b.name,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],
@@ -675,6 +789,64 @@ class _ApplyLeaveSheetState extends State<ApplyLeaveSheet> {
               ),
             ),
             const SizedBox(height: 6),
+
+            // B4.1. Below the reason because it is what supports the reason,
+            // and stated as optional in the control itself — most leave needs
+            // no evidence, and a field that looks required makes people go
+            // hunting for one.
+            if (_attachment == null)
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _pickAttachment,
+                icon: const Icon(Icons.attach_file, size: 18),
+                label: Text(t.leaveAttachOptional),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(46),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.attach_file,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    // Flexible, because a file picked out of a downloads folder
+                    // can easily be longer than a phone is wide.
+                    Flexible(
+                      child: Text(
+                        _attachment!.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _attachment = null),
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: t.leaveAttachRemove,
+                    ),
+                  ],
+                ),
+              ),
+            if (_fieldErrors['attachment'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 12),
+                child: Text(
+                  _fieldErrors['attachment']!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error),
+                ),
+              ),
+            const SizedBox(height: 14),
 
             FilledButton(
               onPressed: _busy ? null : _submit,

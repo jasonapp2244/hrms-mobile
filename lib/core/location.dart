@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'device_integrity.dart';
+
 /// A coordinate pair to attach to a punch.
 ///
 /// `latitude` and `longitude` are the two optional fields `POST
@@ -8,10 +10,27 @@ import 'package:geolocator/geolocator.dart';
 /// half-populated pair is not a location, so they travel together.
 @immutable
 class Coordinates {
-  const Coordinates({required this.latitude, required this.longitude});
+  const Coordinates({
+    required this.latitude,
+    required this.longitude,
+    this.isMocked = false,
+  });
 
   final double latitude;
   final double longitude;
+
+  /// Whether the **operating system** says this fix came from a mock provider
+  /// (B2.7).
+  ///
+  /// Android has reported it since API 18 and iOS 15 reports the equivalent for
+  /// a simulated position, so it is not a guess the app is making — it is the
+  /// platform stating where the coordinates came from, which is a stronger
+  /// signal than anything this app could work out for itself.
+  ///
+  /// A property of the fix rather than of the device, and recorded per punch
+  /// for that reason: somebody can turn a spoofer on between one punch and the
+  /// next.
+  final bool isMocked;
 
   /// The server validates −90…90 and −180…180 and rejects the whole punch on a
   /// validation failure. A fix that far out is a broken sensor rather than a
@@ -29,10 +48,11 @@ class Coordinates {
   bool operator ==(Object other) =>
       other is Coordinates &&
       other.latitude == latitude &&
-      other.longitude == longitude;
+      other.longitude == longitude &&
+      other.isMocked == isMocked;
 
   @override
-  int get hashCode => Object.hash(latitude, longitude);
+  int get hashCode => Object.hash(latitude, longitude, isMocked);
 
   @override
   String toString() =>
@@ -108,6 +128,9 @@ class GeolocatorLocationSource implements LocationSource {
       final coordinates = Coordinates(
         latitude: position.latitude,
         longitude: position.longitude,
+        // Straight off the platform's own report of this fix (B2.7). Never
+        // computed here, and never a reason to drop the punch.
+        isMocked: position.isMocked,
       );
 
       return coordinates.isPlausible ? coordinates : null;
@@ -160,10 +183,15 @@ class GeolocatorLocationSource implements LocationSource {
 class PunchLocator {
   const PunchLocator({
     this.source = const NoLocationSource(),
+    this.integrity = const UnknownDeviceIntegrity(),
     this.deadline = const Duration(seconds: 12),
   });
 
   final LocationSource source;
+
+  /// What the handset says about itself (B2.7). Defaults to saying nothing,
+  /// which is what a test and a desktop build should say.
+  final DeviceIntegrity integrity;
 
   /// The outer stop. Longer than the source's own fix timeout on purpose — it
   /// covers the permission dialog and a plugin that answers late, neither of
@@ -183,11 +211,42 @@ class PunchLocator {
   /// into the request body. Empty when there is no location — the endpoint
   /// treats both fields as optional, and sending nulls would fail its numeric
   /// validation rather than being read as "unknown".
+  ///
+  /// The device flags (B2.7) are separate from the fix and are sent even when
+  /// there is no fix at all: "this phone is rooted" is true whether or not the
+  /// satellites answered. A key is **omitted rather than sent null** when the
+  /// answer is unknown, because the server stores null to mean *the client said
+  /// nothing* and an explicit null would be indistinguishable from an absent
+  /// key anyway — omitting it is the honest encoding of the same thing.
   Future<Map<String, dynamic>> punchBody() async {
     final fix = await resolve();
 
-    return fix == null
-        ? const {}
-        : {'latitude': fix.latitude, 'longitude': fix.longitude};
+    // Asked in parallel with nothing else pending, and memoised after the first
+    // punch — see [SafeDeviceIntegrity].
+    final rooted = await _flag(integrity.isRooted);
+    final emulator = await _flag(integrity.isEmulator);
+
+    return {
+      if (fix != null) ...{
+        'latitude': fix.latitude,
+        'longitude': fix.longitude,
+        'location_mocked': fix.isMocked,
+      },
+      if (rooted != null) 'device_rooted': rooted,
+      if (emulator != null) 'device_emulator': emulator,
+    };
+  }
+
+  /// One integrity answer, or null if it cannot be had quickly or at all.
+  ///
+  /// Short deadline and a swallowed error, for the same reason the location has
+  /// one: this is a note attached to a punch, and a note must never be the
+  /// reason the punch does not happen.
+  Future<bool?> _flag(Future<bool?> Function() ask) async {
+    try {
+      return await ask().timeout(const Duration(seconds: 2));
+    } catch (_) {
+      return null;
+    }
   }
 }

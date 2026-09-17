@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -7,6 +8,7 @@ import 'api_client.dart';
 import 'app_gate.dart';
 import 'biometrics.dart';
 import 'crash_reporter.dart';
+import 'device_integrity.dart';
 import 'locale.dart';
 import 'location.dart';
 import 'models.dart';
@@ -14,6 +16,7 @@ import 'offline_cache.dart';
 import 'onboarding.dart';
 import 'punch_queue.dart';
 import 'push.dart';
+import 'quick_actions.dart';
 
 /// Signed-in state for the whole app.
 ///
@@ -28,6 +31,7 @@ class Session extends ChangeNotifier {
     PunchQueue? queue,
     OfflineCache? cache,
     PushProvider pushProvider = const DisabledPushProvider(),
+    QuickActionProvider quickActions = const DisabledQuickActionProvider(),
     BiometricAuthenticator biometrics = const LocalAuthBiometrics(),
     AppVersionSource versionSource = const PackageInfoVersion(),
     CrashReporter? crashes,
@@ -44,8 +48,12 @@ class Session extends ChangeNotifier {
         // encryptedSharedPreferences flag is deprecated and ignored.
         _storage = storage ?? const FlutterSecureStorage(),
         locator = locator ??
-            const PunchLocator(source: GeolocatorLocationSource()) {
+            const PunchLocator(
+              source: GeolocatorLocationSource(),
+              integrity: SafeDeviceIntegrity(),
+            ) {
     push = PushService(api: this.api, provider: pushProvider);
+    actions = QuickActionService(provider: quickActions);
     lock = AppLock(authenticator: biometrics, storage: _storage);
     gate = AppGate(api: this.api, versionSource: versionSource);
 
@@ -93,6 +101,14 @@ class Session extends ChangeNotifier {
   /// test — and a build with no Firebase credentials — behaves exactly as the
   /// app did before push existed.
   late final PushService push;
+
+  /// B2.8 — the Clock in / Clock out shortcut on the launcher's long-press menu.
+  ///
+  /// Here for the same reason [push] is: it is a consequence of being signed
+  /// in, and it has to be withdrawn the moment somebody is not. Defaults to a
+  /// provider with no launcher behind it, so a test — and any platform the
+  /// plugin does not cover — behaves exactly as the app did before B2.8.
+  late final QuickActionService actions;
 
   /// Supplies the coordinates attached to a punch. Injectable for the same
   /// reason [api] is: a headless test has no platform channel to answer the
@@ -208,6 +224,9 @@ class Session extends ChangeNotifier {
   static const _tokenKey = 'hrms_api_token';
   static const _deviceNameKey = 'hrms_device_name';
 
+  /// B1.6. See [deviceId] — and note it is **not** cleared at sign-out.
+  static const _deviceIdKey = 'hrms_device_id';
+
   AppUser? _user;
   bool _restoring = true;
   ApiException? _restoreError;
@@ -249,6 +268,41 @@ class Session extends ChangeNotifier {
             ? 'Android device'
             : 'Desktop';
     await _storage.write(key: _deviceNameKey, value: generated);
+    return generated;
+  }
+
+  /// This handset's own id, generated once and kept in the keystore (B1.6).
+  ///
+  /// **Not a hardware identifier**, deliberately. `ANDROID_ID` and
+  /// `identifierForVendor` are persistent cross-app handles on a person,
+  /// collected for an HR system that has no need of one and dragging Play Store
+  /// data-safety declarations behind them — and they would buy nothing here,
+  /// because the thing this defends against is a *second* handset, and a second
+  /// handset has a different id under either scheme.
+  ///
+  /// **Kept apart from [_deviceNameKey] even though both live in the keystore.**
+  /// The name is a label a person may change; this is the value a binding turns
+  /// on, and the two must not be able to be confused for one another.
+  ///
+  /// **Survives a sign-out on purpose, and that is the one thing to be careful
+  /// of here.** [_clearToken] wipes the queue, the cache and the lock because
+  /// each belongs to the person who signed out. This does not: it describes the
+  /// *phone*. Clearing it would hand the next sign-in a fresh identity, which
+  /// is precisely the move the feature exists to refuse — a borrowed login
+  /// would sign out, sign in, and be trusted.
+  Future<String> deviceId() async {
+    final existing = await _storage.read(key: _deviceIdKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    // 128 bits from the platform's secure generator, hex-encoded. A v4 UUID by
+    // any other name; no package needed for sixteen bytes.
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final generated =
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+    await _storage.write(key: _deviceIdKey, value: generated);
+
     return generated;
   }
 
@@ -320,6 +374,13 @@ class Session extends ChangeNotifier {
       // was put there to hide.
       await lock.load(signedIn: isSignedIn);
 
+      // B2.8, and here rather than beside `_startPush` so that the offline
+      // restore above gets it too. Nothing is published yet — the Clock screen
+      // does that once it knows which way the next punch goes — but a tap that
+      // launched the app is delivered on this call, so it has to happen before
+      // any screen looks for one.
+      await _startQuickActions();
+
       // Same reasoning, and the same moment: `_Root` builds synchronously, so
       // an answer that arrives a frame later has already flashed the login
       // form at somebody who was about to be introduced to the app.
@@ -339,6 +400,15 @@ class Session extends ChangeNotifier {
       'email': email.trim(),
       'password': password,
       'device_name': await deviceName(),
+      // B1.6. Sent on every sign-in, and used only by a company that has
+      // switched binding on — the server decides, so the app has no policy to
+      // read and nothing to get wrong.
+      'device_id': await deviceId(),
+      'platform': defaultTargetPlatform == TargetPlatform.iOS
+          ? 'ios'
+          : defaultTargetPlatform == TargetPlatform.android
+              ? 'android'
+              : 'other',
     });
 
     final token = '${res['token']}';
@@ -353,6 +423,7 @@ class Session extends ChangeNotifier {
     // After the user is published, not before: the permission prompt should
     // appear over the app rather than over the login screen.
     await _startPush();
+    await _startQuickActions();
   }
 
   /// Registers this handset for notifications, and never gets in the way.
@@ -366,6 +437,26 @@ class Session extends ChangeNotifier {
       await push.start(deviceName: await deviceName());
     } catch (e) {
       debugPrint('Push start failed: $e');
+    }
+  }
+
+  /// Begins listening for launcher shortcut taps (B2.8), and never gets in the
+  /// way of signing in.
+  ///
+  /// Started on both paths into a signed-in app and on **both** restores,
+  /// including the offline one — a launcher menu is a local thing and needs no
+  /// network, so a handset opened with no signal still gets its shortcut and
+  /// can still queue the punch it makes (B2.4).
+  ///
+  /// Only while signed in. The tap is honoured by the Clock screen, which does
+  /// not exist for anybody who is not, and a tap held across a sign-in would
+  /// punch for the wrong person.
+  Future<void> _startQuickActions() async {
+    if (!isSignedIn) return;
+    try {
+      await actions.start();
+    } catch (e) {
+      debugPrint('Quick actions start failed: $e');
     }
   }
 
@@ -495,6 +586,12 @@ class Session extends ChangeNotifier {
     // the next one to sign in here has not been asked.
     await lock.clear();
 
+    // And the launcher shortcut (B2.8). The sharpest of the lot on a shared
+    // work handset: a "Clock out" left on the long-press menu by the person
+    // who just signed out is one tap from clocking out whoever signs in next,
+    // and it sits there whether or not the app is even running.
+    await actions.withdraw();
+
     _offlineSince = null;
   }
 
@@ -510,6 +607,7 @@ class Session extends ChangeNotifier {
     gate.removeListener(notifyListeners);
     gate.dispose();
     push.dispose();
+    actions.dispose();
     queue.dispose();
     super.dispose();
   }

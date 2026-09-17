@@ -365,6 +365,31 @@ class Fmt {
     return weekday == null ? english : weekdayShort(t, weekday);
   }
 
+  /// Metres → "80 m" or "2.3 km" (B2.5).
+  ///
+  /// The same threshold and the same rounding the server uses in its own
+  /// refusal, so somebody who reads the app's warning and then the server's
+  /// message is not shown two different numbers for one distance.
+  ///
+  /// **Three bands, not two.** Metres below a kilometre, because a fence is
+  /// tens of metres wide and "0.08 km" reads as nothing. A tenth of a kilometre
+  /// from there to ten, because 2.3 km is a walk somebody can judge. And whole
+  /// kilometres above that — a tenth is useful at 2.3 km and absurd at
+  /// 11688.3 km, which is what the first version printed to somebody testing
+  /// from the other side of the world. Precision that outruns the question it
+  /// answers reads as a broken number.
+  static String distance(AppLocalizations t, double metres) {
+    if (metres < 1000) {
+      return t.distanceMetres(metres.round().toString());
+    }
+
+    final km = metres / 1000;
+
+    return t.distanceKilometres(
+      km < 10 ? km.toStringAsFixed(1) : km.round().toString(),
+    );
+  }
+
   /// Minutes → "7h 14m". Used for worked time, which is never a bare number
   /// anyone wants to read.
   static String duration(AppLocalizations t, int minutes) {

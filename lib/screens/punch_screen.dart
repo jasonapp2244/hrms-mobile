@@ -8,6 +8,7 @@ import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/offline_cache.dart';
 import '../core/punch_queue.dart';
+import '../core/session.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
@@ -32,6 +33,10 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   bool _punching = false;
   bool _breaking = false;
   String? _error;
+
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
 
   /// Drives the live "worked so far" figure. The server sends worked_minutes at
   /// the moment of the call; ticking locally keeps the card honest between
@@ -66,17 +71,100 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final session = SessionScope.read(context);
+
     // The queue is read from disk once, on the first build that has a session
     // to read it with. Anything waiting from a previous launch shows up in the
     // banner immediately rather than at the next tap.
-    SessionScope.read(context).queue.load();
+    session.queue.load();
+
+    // B2.8. Attached once, and re-attached only if the session itself is
+    // replaced — which is what a test that pumps the app twice does.
+    if (!identical(session, _session)) {
+      _session?.actions.pending.removeListener(_consumePendingAction);
+      _session = session;
+      session.actions.pending.addListener(_consumePendingAction);
+
+      // Launching *from* a shortcut is the normal case, so the tap is already
+      // waiting rather than arriving as an event. It will not fire yet — the
+      // first `_load` is still in flight — but `_load` asks again when it
+      // settles, which is the moment there is a day to punch against.
+      _consumePendingAction();
+    }
   }
 
   @override
   void dispose() {
+    _session?.actions.pending.removeListener(_consumePendingAction);
     _ticker?.cancel();
     super.dispose();
   }
+
+  /// Whether a punch can be made right now.
+  ///
+  /// **One rule, read by the button and by the launcher shortcut.** The two
+  /// states that offer a punch are a loaded day outside the cooldown, and the
+  /// offline case where the day is unknown but a punch can still be queued
+  /// (B2.4) — and a second copy of that in the shortcut handler would be the
+  /// next thing to drift.
+  bool get _canPunchNow =>
+      !_punching && (_offlineWithoutToday || (_today?.canCheck ?? false));
+
+  /// Puts the shortcut that matches this day on the launcher (B2.8).
+  ///
+  /// Called whenever the day settles, so the menu follows a punch made here, a
+  /// punch made on the web, and a language changed on the Profile screen — the
+  /// title is read from `context.t` every time rather than cached.
+  ///
+  /// Nothing is published while the day is unknown. The offline case has no
+  /// answer to "which way does the next punch go", and a shortcut that guessed
+  /// would be a label that lies on the one screen that must not.
+  void _publishShortcut() {
+    final today = _today;
+    if (today == null) return;
+
+    final t = context.t;
+    unawaited(
+      SessionScope.read(context).actions.publish(
+            willClockIn: today.willClockIn,
+            title: today.willClockIn ? t.punchCheckIn : t.punchCheckOut,
+          ),
+    );
+  }
+
+  /// Makes the punch a launcher shortcut asked for (B2.8).
+  ///
+  /// **Held, not dropped, while the first load is in flight.** Tapping the
+  /// shortcut is how the app started, so this runs for the first time before
+  /// there is any day to punch against; `_load` calls it again once there is.
+  /// Dropping it there would make the feature fail exactly on the cold launch
+  /// it exists for.
+  ///
+  /// Once the day has settled the tap is spent either way — a shortcut that
+  /// survived into the next refresh would punch somebody in twice, minutes
+  /// apart, for one tap they had long forgotten.
+  void _consumePendingAction() {
+    final session = _session;
+    if (session == null || !mounted) return;
+    if (session.actions.pending.value == null) return;
+
+    // Still loading. Leave it waiting; the `finally` in `_load` asks again.
+    if (_loading) return;
+
+    // Cleared **before** the punch, not after: `_punch` reloads on success and
+    // the reload asks again, which with the value still set would punch in a
+    // loop.
+    session.actions.pending.value = null;
+
+    // Nothing to do if the screen would not offer the button either — the
+    // cooldown, or an account with no employee record. The person is looking
+    // at the screen that says why.
+    if (!_canPunchNow) return;
+
+    unawaited(_punch());
+  }
+
+  Session? _session;
 
   /// [silent] keeps the current card on screen while the new status is
   /// fetched, for refreshes the user did not explicitly ask for.
@@ -84,6 +172,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     setState(() {
       _loading = !silent;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -155,12 +244,21 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
 
       setState(() {
         _offlineWithoutToday = false;
-        _error = e.error == 'forbidden'
-            ? t.clockNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.clockNoEmployeeRecord : e.text(t);
         _cachedAt = null;
         _loading = false;
       });
+    } finally {
+      // B2.8, and on every exit from this method including the early returns.
+      // The day has settled now, whichever way it went — so the launcher menu
+      // is brought into line with it, and a shortcut tap that arrived while
+      // this load was in flight finally has something to act on.
+      if (mounted) {
+        _publishShortcut();
+        _consumePendingAction();
+      }
     }
   }
 
@@ -217,6 +315,27 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     if (outcome.changedAnything) await _load(silent: true);
   }
 
+  /// The message to show instead of posting, or null to go ahead (B2.5).
+  ///
+  /// Returns null in every case the server would have accepted: no fence
+  /// applies, the day has not loaded, or the punch carries no coordinates —
+  /// that last one is an exemption the server makes deliberately, and matching
+  /// it here is what keeps this a shortcut rather than a second, stricter rule.
+  String? _outsideFence(Map<String, dynamic> body) {
+    final fence = _today?.geofence;
+    final lat = (body['latitude'] as num?)?.toDouble();
+    final lng = (body['longitude'] as num?)?.toDouble();
+
+    if (fence == null || lat == null || lng == null) return null;
+    if (!fence.excludes(lat, lng)) return null;
+
+    return context.t.clockOutsideFence(
+      Fmt.distance(context.t, fence.metresFrom(lat, lng)),
+      fence.office,
+      '${fence.radiusMetres}',
+    );
+  }
+
   Future<void> _punch() async {
     // Read before the first await: neither the palette nor the strings can
     // change mid-call, and reaching for a BuildContext after one is the lint
@@ -235,10 +354,25 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       // rather than throwing when there is no fix, no permission or no signal,
       // so a punch is never lost to a missing coordinate; it is just recorded
       // without one, which the API explicitly allows.
-      final res = await session.api.post(
-        '/attendance/check',
-        body: await session.locator.punchBody(),
-      );
+      final body = await session.locator.punchBody();
+
+      // B2.5. When a fence applies and there *is* a fix, the app can already
+      // tell what the server is about to say — the rule and the radius came
+      // down with the day, and the distance is the same haversine. Saying it
+      // here costs no round trip and names the office and the gap, which is the
+      // one thing the person can act on.
+      //
+      // **Only with a fix.** The server exempts a punch that arrives without
+      // coordinates, so refusing one here would invent a rule the server does
+      // not have and lock out anybody whose phone cannot see the sky.
+      final outside = _outsideFence(body);
+
+      if (outside != null) {
+        _showResult(outside, colors.late);
+        return;
+      }
+
+      final res = await session.api.post('/attendance/check', body: body);
       final punch = Punch.fromJson(res['punch'] as Map<String, dynamic>);
 
       if (!mounted) return;
@@ -297,6 +431,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       intendedType: _today?.willClockIn == true ? 'in' : 'out',
       latitude: (body['latitude'] as num?)?.toDouble(),
       longitude: (body['longitude'] as num?)?.toDouble(),
+      // Taken now and kept with the punch (B2.7) — what the phone was when the
+      // button was pressed, not what it is when the queue finally drains.
+      locationMocked: body['location_mocked'] as bool?,
+      deviceRooted: body['device_rooted'] as bool?,
+      deviceEmulator: body['device_emulator'] as bool?,
     ));
 
     if (!mounted) return;
@@ -386,7 +525,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: RefreshIndicator(
           onRefresh: _load,
           child: ListView(
@@ -418,7 +557,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
                 _PunchButton(
                   today: _today!,
                   busy: _punching,
-                  onPressed: _today!.canCheck ? _punch : null,
+                  onPressed: _canPunchNow ? _punch : null,
                 ),
                 // Only on the clock. Off the clock there is no break to take,
                 // and the server would refuse it — so there is nothing to show.
@@ -429,6 +568,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
                     busy: _breaking,
                     onPressed: _today!.canBreak ? _break : null,
                   ),
+                  // What pressing it costs them (A5.7). The server has known
+                  // whether a break is paid since the policy shipped and never
+                  // said, which left the one screen with a break button unable
+                  // to answer the only question somebody has before taking one.
+                  _BreakPolicyNote(shift: _today!.shift),
                 ],
                 const SizedBox(height: 24),
                 _DayNotes(today: _today!),
@@ -687,6 +831,35 @@ class _StatusCard extends StatelessWidget {
                 ],
               ),
             ],
+            // B2.5. **Policy, not position** — it needs no fix, no permission
+            // and no battery, so it can be stated before anybody taps rather
+            // than after they have been refused. Present only when a fence
+            // actually applies to this employee: the server resolves that, and
+            // a home worker sees nothing.
+            if (today.geofence != null) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Icon(
+                    Icons.my_location,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      t.clockFenceRule(
+                        '${today.geofence!.radiusMetres}',
+                        today.geofence!.office,
+                      ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -865,6 +1038,70 @@ class _BreakButton extends StatelessWidget {
           minimumSize: const Size.fromHeight(56),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
+      ),
+    );
+  }
+}
+
+/// What a break costs, under this shift's policy (A5.7).
+///
+/// One line, and only when there is something to say: a shift with no break
+/// configured gets nothing rather than "0 minutes, unpaid".
+///
+/// **It states the consequence, not the setting.** "Unpaid" is a payroll word;
+/// "comes off your hours" is what somebody standing in a corridor deciding
+/// whether to take lunch actually needs to know. The minimum rule gets its own
+/// wording for the same reason — under it, cutting a break short buys nothing,
+/// and that changes what people do.
+class _BreakPolicyNote extends StatelessWidget {
+  const _BreakPolicyNote({required this.shift});
+
+  final ShiftInfo? shift;
+
+  @override
+  Widget build(BuildContext context) {
+    final policy = shift;
+
+    if (policy == null || !policy.hasBreakPolicy) {
+      return const SizedBox.shrink();
+    }
+
+    final t = context.t;
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+
+    final (icon, text, tone) = switch (policy) {
+      final s when s.breakIsPaid => (
+        Icons.check_circle_outline,
+        t.clockBreakPaid(s.breakMinutes),
+        colors.present,
+      ),
+      final s when s.breakIsMinimum => (
+        Icons.info_outline,
+        t.clockBreakUnpaidMinimum(s.breakMinutes),
+        colors.neutral,
+      ),
+      final s => (
+        Icons.info_outline,
+        t.clockBreakUnpaid(s.breakMinutes),
+        colors.neutral,
+      ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: tone),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(color: tone),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -60,6 +60,19 @@ class OfflineCache {
   /// answer to a 7-day one.
   static String historyKey(int days) => 'attendance.history.$days';
 
+  /// The window `/attendance/history` answers for when it is asked for none,
+  /// which is what the first load of the screen asks: there is no window to
+  /// ask for until the server has said what day it is.
+  static const serverDefaultHistoryDays = 30;
+
+  /// `/attendance/history` for one calendar month (B3.4).
+  ///
+  /// **One slot for every month, not one each.** Somebody paging back through a
+  /// year would otherwise leave a year of months on the disk, and a saved copy
+  /// of March is not an answer to a question about April — the caller passes a
+  /// `stillValid` that checks the month before this is read back.
+  static const keyHistoryMonth = 'attendance.history.month';
+
   final Directory? _override;
 
   Map<String, _Entry> _entries = {};

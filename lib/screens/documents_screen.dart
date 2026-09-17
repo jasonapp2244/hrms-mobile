@@ -1,10 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../core/api_client.dart';
+import '../core/downloads.dart';
 import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
@@ -34,6 +33,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   bool _loading = true;
   String? _error;
 
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
+
   /// The document currently downloading, so one row spins rather than the
   /// whole list going dead.
   int? _busyId;
@@ -48,6 +51,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -71,9 +75,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       // building, which asserts.
       final t = context.t;
       setState(() {
-        _error = e.error == 'forbidden'
-            ? t.documentsNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.documentsNoEmployeeRecord : e.text(t);
         _loading = false;
       });
     }
@@ -96,21 +100,16 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     setState(() => _busyId = document.id);
 
     try {
-      final file = await SessionScope.read(context).api.getFile('/documents/${document.id}');
-
-      final dir = await getTemporaryDirectory();
-      // The server's name, falling back to the one on the record. Sanitised
-      // because it reaches a filesystem path, and it was typed by a person.
-      final name = _safeName(file.filename ?? document.originalName, document.id);
-      final path = '${dir.path}${Platform.pathSeparator}$name';
-
-      await File(path).writeAsBytes(file.bytes, flush: true);
-
-      final result = await OpenFilex.open(path);
+      final opened = await downloadAndOpen(
+        SessionScope.read(context).api,
+        '/documents/${document.id}',
+        fallbackName: document.originalName,
+        id: document.id,
+      );
 
       if (!mounted) return;
 
-      if (result.type != ResultType.done) {
+      if (opened == OpenedFile.noOpener) {
         // Most often no app installed for the type — a .docx on a bare
         // handset. Say that rather than leaving the tap looking ignored.
         _say(t.documentsNoOpener(document.originalName), colors.late);
@@ -127,13 +126,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
-  }
-
-  /// A filename safe to put on a path, and never empty.
-  static String _safeName(String raw, int id) {
-    final cleaned = raw.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-
-    return cleaned.isEmpty || cleaned == '.' ? 'document-$id' : cleaned;
   }
 
   void _say(String message, Color colour) {
@@ -162,7 +154,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: _documents.isEmpty
             ? EmptyState(
                 icon: Icons.folder_open_outlined,

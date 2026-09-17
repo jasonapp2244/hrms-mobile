@@ -29,6 +29,22 @@ extension L10nContext on BuildContext {
 /// with every request (see `ApiClient.acceptLanguage`), so the day the API
 /// starts answering in Spanish this method needs no change at all.
 extension ApiErrorText on ApiException {
+  /// True when the signed-in account has no employee record, and so no
+  /// attendance, leave, schedule, documents or colleagues either.
+  ///
+  /// `forbidden` is raised in exactly one place on this API — the resolver
+  /// every employee-facing endpoint goes through — so on those endpoints it
+  /// means this and nothing else.
+  ///
+  /// **Worth knowing because it is the one failure no retry can clear.** An HR
+  /// or administrator account that was never linked to an employee saw the
+  /// ordinary error card on four tabs, each offering "Try again" for a
+  /// condition that will still be true on the hundredth press. The Profile tab
+  /// already says the true thing — that this account belongs on the web
+  /// dashboard — and the others now stop pretending the server is having a
+  /// moment.
+  bool get isMissingEmployeeRecord => error == 'forbidden';
+
   String text(AppLocalizations t) {
     if (isNetworkFailure) return t.errorNoConnection;
     if (isRateLimited) return t.errorTooManyAttempts;

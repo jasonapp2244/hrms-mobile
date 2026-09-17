@@ -11,6 +11,8 @@
 ///     office clock.
 library;
 
+import 'dart:math' as math;
+
 import '../l10n/generated/app_localizations.dart';
 
 // For PushRoute. A notification in the history points at the same tabs a push
@@ -478,6 +480,9 @@ class ShiftInfo {
     required this.endTime,
     this.lateGraceMinutes,
     this.crossesMidnight = false,
+    this.breakMinutes = 0,
+    this.breakIsPaid = false,
+    this.breakIsMinimum = false,
   });
 
   final String name;
@@ -485,6 +490,19 @@ class ShiftInfo {
   final String endTime;
   final int? lateGraceMinutes;
   final bool crossesMidnight;
+
+  /// The shift's break policy (A5.7), for the one screen with a break button.
+  ///
+  /// Absent from a saved copy taken before the policy shipped, and from the
+  /// `/schedule` and `/team/*` payloads, which do not carry it — so these
+  /// default to the old behaviour rather than to null, and a screen reading
+  /// them shows nothing rather than something wrong.
+  final int breakMinutes;
+  final bool breakIsPaid;
+  final bool breakIsMinimum;
+
+  /// Whether there is anything to say about the break at all.
+  bool get hasBreakPolicy => breakMinutes > 0;
 
   factory ShiftInfo.fromJson(Map<String, dynamic> j) => ShiftInfo(
         name: '${j['name'] ?? ''}',
@@ -494,6 +512,11 @@ class ShiftInfo {
             ? (j['late_grace_minutes'] as num).toInt()
             : null,
         crossesMidnight: j['crosses_midnight'] == true,
+        breakMinutes: j['break_minutes'] is num
+            ? (j['break_minutes'] as num).toInt()
+            : 0,
+        breakIsPaid: j['break_is_paid'] == true,
+        breakIsMinimum: j['break_is_minimum'] == true,
       );
 
   /// "09:00:00" reads badly on a card; "09:00" does.
@@ -522,6 +545,7 @@ class TodayStatus {
     this.canBreak = false,
     this.nextBreakAction = 'start',
     this.breakStartedAt,
+    this.geofence,
   });
 
   /// The day a punch made *now* counts against. On a shift crossing midnight
@@ -563,6 +587,18 @@ class TodayStatus {
   /// Set only while [onBreak]. ISO 8601 with the company's offset.
   final String? breakStartedAt;
 
+  /// The fence this employee is judged against, or null when none applies
+  /// (B2.5).
+  ///
+  /// **Resolved by the server, never worked out here.** Whether a fence applies
+  /// depends on the company policy, the employee's work mode and whether the
+  /// office has coordinates at all — three rules the enforcement already owns,
+  /// and a second copy in the app would drift the first time one of them
+  /// changed. Null means say nothing: a home worker told they are two
+  /// kilometres from an office they were instructed not to attend is worse
+  /// than no warning at all.
+  final Geofence? geofence;
+
   bool get willClockIn => nextAction == 'in';
   bool get willStartBreak => nextBreakAction == 'start';
 
@@ -589,6 +625,62 @@ class TodayStatus {
         canBreak: j['can_break'] == true,
         nextBreakAction: '${j['next_break_action'] ?? 'start'}',
         breakStartedAt: _str(j['break_started_at']),
+        geofence: j['geofence'] is Map<String, dynamic>
+            ? Geofence.fromJson(j['geofence'] as Map<String, dynamic>)
+            : null,
+      );
+}
+
+/// Where somebody has to be standing to clock in (B2.5).
+///
+/// Only ever present when the fence actually applies to the person reading it —
+/// see [TodayStatus.geofence].
+class Geofence {
+  const Geofence({
+    required this.office,
+    required this.latitude,
+    required this.longitude,
+    required this.radiusMetres,
+  });
+
+  final String office;
+  final double latitude;
+  final double longitude;
+  final int radiusMetres;
+
+  /// Metres between the fence's centre and a point, by the **same haversine on
+  /// a spherical earth** the server uses.
+  ///
+  /// Deliberately the same formula rather than a cleverer one: the app's job
+  /// here is to predict the server's answer, and a more accurate distance that
+  /// disagreed with the enforcement would be worse than a less accurate one
+  /// that matched it. Accurate to a few metres over the distances a fence cares
+  /// about, which is well inside the error of the fix itself.
+  double metresFrom(double lat, double lng) {
+    const earthRadius = 6371000.0;
+
+    final dLat = _radians(lat - latitude);
+    final dLng = _radians(lng - longitude);
+
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_radians(latitude)) *
+            math.cos(_radians(lat)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+
+    return earthRadius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  /// True when a fix that far out would be refused by the server.
+  bool excludes(double lat, double lng) => metresFrom(lat, lng) > radiusMetres;
+
+  static double _radians(double degrees) => degrees * math.pi / 180;
+
+  factory Geofence.fromJson(Map<String, dynamic> j) => Geofence(
+        office: '${j['office'] ?? ''}',
+        latitude: _toDouble(j['latitude']),
+        longitude: _toDouble(j['longitude']),
+        radiusMetres: _toInt(j['radius']),
       );
 }
 
@@ -756,6 +848,7 @@ class LeaveRequest {
     this.reason,
     this.decisionNote,
     this.managerNote,
+    this.attachmentName,
   });
 
   final int id;
@@ -777,6 +870,13 @@ class LeaveRequest {
   final String? decisionNote;
   final String? managerNote;
 
+  /// The supporting file's name, or null when there is none (B4.1).
+  ///
+  /// Taken from `has_attachment` and not from the name alone: a request whose
+  /// file has gone missing off the disk still carries the name it was uploaded
+  /// under, and a paperclip pointing at nothing is worse than no paperclip.
+  final String? attachmentName;
+
   factory LeaveRequest.fromJson(Map<String, dynamic> j) => LeaveRequest(
         id: _toInt(j['id']),
         leaveType: '${j['leave_type'] ?? ''}',
@@ -787,6 +887,8 @@ class LeaveRequest {
         status: '${j['status'] ?? ''}',
         stage: '${j['stage'] ?? ''}',
         canCancel: j['can_cancel'] == true,
+        attachmentName:
+            j['has_attachment'] == true ? _str(j['attachment_name']) : null,
         reason: _str(j['reason']),
         decisionNote: _str(j['decision_note']),
         managerNote: _str(j['manager_note']),
@@ -817,6 +919,7 @@ class PendingApproval {
     required this.days,
     required this.clashes,
     this.reason,
+    this.attachmentName,
   });
 
   final int id;
@@ -831,6 +934,10 @@ class PendingApproval {
   final List<LeaveClash> clashes;
   final String? reason;
 
+  /// The supporting file's name, or null when there is none (B4.1). Taken from
+  /// `has_attachment`, for the reason on [LeaveRequest.attachmentName].
+  final String? attachmentName;
+
   factory PendingApproval.fromJson(Map<String, dynamic> j) => PendingApproval(
         id: _toInt(j['id']),
         employee: '${j['employee'] ?? ''}',
@@ -843,6 +950,8 @@ class PendingApproval {
             .map(LeaveClash.fromJson)
             .toList(),
         reason: _str(j['reason']),
+        attachmentName:
+            j['has_attachment'] == true ? _str(j['attachment_name']) : null,
       );
 }
 
@@ -1037,6 +1146,118 @@ class TeamRosterDay {
             ? ShiftInfo.fromJson(j['shift'] as Map<String, dynamic>)
             : null,
         holiday: _str(j['holiday']),
+      );
+}
+
+/// Who on the team is off, a month at a time (B4.6).
+///
+/// Date-major, the opposite of [TeamRosterMember] — this answers "can I let a
+/// second person go that week", which is a question about a day rather than
+/// about a person.
+class TeamLeaveMonth {
+  TeamLeaveMonth({
+    required this.month,
+    required this.today,
+    required this.teamSize,
+    required this.days,
+  });
+
+  /// `YYYY-MM`, as the server named it.
+  final String month;
+
+  /// The **company's** today, for marking the current cell. Never the
+  /// handset's: the phone is wherever its owner is standing.
+  final String today;
+
+  final int teamSize;
+  final List<TeamLeaveDay> days;
+
+  factory TeamLeaveMonth.fromJson(Map<String, dynamic> j) => TeamLeaveMonth(
+        month: '${j['month'] ?? ''}',
+        today: '${j['today'] ?? ''}',
+        teamSize: _toInt(j['team_size']),
+        days: ((j['days'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(TeamLeaveDay.fromJson)
+            .toList(),
+      );
+
+  /// Nobody off all month — which is an ordinary answer, not an empty state.
+  bool get isQuiet => days.every((d) => d.people.isEmpty);
+}
+
+/// One cell of the month grid. Present even when nobody is off, because the
+/// weekend and holiday facts belong to the day rather than to the leave.
+class TeamLeaveDay {
+  TeamLeaveDay({
+    required this.date,
+    required this.isWeekend,
+    required this.people,
+    this.holiday,
+  });
+
+  final String date;
+  final bool isWeekend;
+  final String? holiday;
+  final List<TeamLeavePerson> people;
+
+  /// The day of the month, for the grid's numeral.
+  int get dayOfMonth => int.tryParse(date.split('-').last) ?? 0;
+
+  factory TeamLeaveDay.fromJson(Map<String, dynamic> j) => TeamLeaveDay(
+        date: '${j['date'] ?? ''}',
+        isWeekend: j['weekend'] == true,
+        holiday: _str(j['holiday']),
+        people: ((j['people'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(TeamLeavePerson.fromJson)
+            .toList(),
+      );
+}
+
+/// One person's leave, as it falls on one day of the grid.
+///
+/// [startDate] and [endDate] name the whole request rather than this day, so a
+/// tap can say "29 Jul – 3 Aug" without a second call — a stretch that began
+/// last month still reads correctly on the 1st.
+class TeamLeavePerson {
+  TeamLeavePerson({
+    required this.employeeId,
+    required this.name,
+    required this.status,
+    required this.isHalfDay,
+    required this.startDate,
+    required this.endDate,
+    this.leaveType,
+  });
+
+  final int employeeId;
+  final String name;
+
+  /// `approved` or `pending`, and nothing else is sent. Pending is drawn
+  /// alongside approved on purpose: a month showing only what is already
+  /// granted is a month a manager can approve a second person onto.
+  final String status;
+
+  final bool isHalfDay;
+  final String startDate;
+  final String endDate;
+  final String? leaveType;
+
+  bool get isPending => status == 'pending';
+
+  /// True when the whole request is this one day, which is what decides
+  /// whether the dates are worth printing at all.
+  bool get isSingleDay => startDate == endDate;
+
+  factory TeamLeavePerson.fromJson(Map<String, dynamic> j) => TeamLeavePerson(
+        employeeId: _toInt(j['employee_id']),
+        name: '${j['name'] ?? ''}',
+        status: '${j['status'] ?? ''}',
+        isHalfDay: j['is_half_day'] == true,
+        startDate: '${j['start_date'] ?? ''}',
+        endDate: '${j['end_date'] ?? ''}',
+        leaveType: _str(j['leave_type']),
       );
 }
 

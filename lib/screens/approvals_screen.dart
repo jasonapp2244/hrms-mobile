@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/downloads.dart';
 import '../core/l10n.dart';
 import '../core/models.dart';
 import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/month_bar.dart';
 
 /// Manager mode. Reachable only when `approve-leave` is present — the shell
 /// hides the tab otherwise, and the endpoints behind it are gated *and* scoped
@@ -26,15 +30,20 @@ class ApprovalsScreen extends StatelessWidget {
     final t = context.t;
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(t.teamTitle),
           bottom: TabBar(
+            // Four tabs do not fit as equal thirds on a narrow handset, and a
+            // label that ellipsises is a label nobody reads.
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: t.teamTabApprovals),
               Tab(text: t.teamTabInToday),
               Tab(text: t.teamTabRoster),
+              Tab(text: t.teamTabLeave),
             ],
           ),
         ),
@@ -43,6 +52,7 @@ class ApprovalsScreen extends StatelessWidget {
             _ApprovalsTab(visible: visible),
             _TeamTab(visible: visible),
             _TeamRosterTab(visible: visible),
+            _TeamLeaveTab(visible: visible),
           ],
         ),
       ),
@@ -67,6 +77,10 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
   List<PendingApproval> _pending = const [];
   bool _loading = true;
   String? _error;
+
+  /// The request whose attachment is downloading, so one card spins rather than
+  /// the whole inbox going dead (B4.1).
+  int? _openingId;
 
   @override
   ValueListenable<bool> get visibility => widget.visible;
@@ -110,6 +124,50 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
         _loading = false;
       });
     }
+  }
+
+  /// Fetch the supporting file and hand it to whatever opens that type (B4.1).
+  ///
+  /// The endpoint lets this manager through for their own direct reports and
+  /// refuses everyone else, so there is nothing to check here that the server
+  /// is not already checking.
+  Future<void> _openAttachment(PendingApproval item) async {
+    // Read before the first await: the palette cannot change mid-call, and
+    // reaching for a BuildContext after one is the lint this avoids.
+    final colors = AppColors.of(context);
+    final t = context.t;
+
+    if (_openingId != null) return;
+    setState(() => _openingId = item.id);
+
+    try {
+      final opened = await downloadAndOpen(
+        SessionScope.read(context).api,
+        '/leave/requests/${item.id}/attachment',
+        fallbackName: item.attachmentName ?? '',
+        id: item.id,
+      );
+
+      if (!mounted) return;
+
+      if (opened == OpenedFile.noOpener) {
+        _say(t.documentsNoOpener(item.attachmentName ?? ''), colors.late);
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _say(e.text(t), Theme.of(context).colorScheme.error);
+    } on FileSystemException {
+      if (!mounted) return;
+      _say(t.documentsNoRoom, Theme.of(context).colorScheme.error);
+    } finally {
+      if (mounted) setState(() => _openingId = null);
+    }
+  }
+
+  void _say(String message, Color colour) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message), backgroundColor: colour));
   }
 
   Future<void> _approve(PendingApproval item) async {
@@ -257,6 +315,8 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
                       item: item,
                       onApprove: () => _approve(item),
                       onReject: () => _reject(item),
+                      onOpenAttachment: () => _openAttachment(item),
+                      openingAttachment: _openingId == item.id,
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -272,11 +332,18 @@ class _ApprovalCard extends StatelessWidget {
     required this.item,
     required this.onApprove,
     required this.onReject,
+    required this.onOpenAttachment,
+    required this.openingAttachment,
   });
 
   final PendingApproval item;
   final VoidCallback onApprove;
   final VoidCallback onReject;
+
+  /// B4.1. Downloads the supporting file and hands it to whatever opens that
+  /// type — the manager is the one person on the phone who has to read it.
+  final VoidCallback onOpenAttachment;
+  final bool openingAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -308,6 +375,34 @@ class _ApprovalCard extends StatelessWidget {
             if (item.reason != null && item.reason!.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(item.reason!, style: theme.textTheme.bodyMedium),
+            ],
+
+            // B4.1. Under the reason because it is what supports it, and above
+            // the decision buttons for the same reason the clashes are: a sick
+            // note read after approving is a sick note nobody read.
+            if (item.attachmentName != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: openingAttachment ? null : onOpenAttachment,
+                icon: openingAttachment
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                      )
+                    : const Icon(Icons.attach_file, size: 18),
+                // Named rather than labelled "attachment": a sick note and a
+                // photo of a car park are both files, and only one of them
+                // needs opening before deciding.
+                label: Text(
+                  item.attachmentName!,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: OutlinedButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  minimumSize: const Size.fromHeight(44),
+                ),
+              ),
             ],
 
             // Clashes go *before* the approve button, not after — the whole
@@ -621,6 +716,12 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
   /// How far ahead the window starts, in whole weeks from today.
   int _weekOffset = 0;
 
+  /// What the **server** last called today, read back out of its own reply.
+  ///
+  /// Not `DateTime.now()` — see the note in [_load]. Null until the first reply
+  /// lands, which is why that one asks for no window at all.
+  String? _anchor;
+
   @override
   ValueListenable<bool> get visibility => widget.visible;
 
@@ -639,20 +740,37 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
       _error = null;
     });
 
-    // Dates are built here rather than sent as an offset: the server takes a
-    // concrete day, and a device whose clock is a day out should show its own
-    // idea of "this week" rather than silently disagree with the header.
-    final start = DateTime.now().add(Duration(days: 7 * _weekOffset));
-    final from = '${start.year.toString().padLeft(4, '0')}-'
-        '${start.month.toString().padLeft(2, '0')}-'
-        '${start.day.toString().padLeft(2, '0')}';
+    // Neither end of this window comes off the handset's clock. The roster is
+    // planned in the company's timezone and the phone is wherever its owner is,
+    // so for part of every day the two disagree about the date — and this
+    // endpoint takes whatever `from` it is given rather than refusing one, so a
+    // phone already on tomorrow was quietly shown Tuesday-to-Monday under a
+    // heading that said "This week". Nothing errored; the heading simply lied.
+    //
+    // So on this week no `from` is sent at all: the server's default is the
+    // company's today, which is the only correct answer, and its echo is what
+    // [_anchor] is learned from. Every other week counts from that anchor —
+    // and because this week always re-asks, a session left open across midnight
+    // corrects itself the moment the manager comes back to it rather than
+    // drifting a day further out each time.
+    final anchor = _anchor;
+    final from = _weekOffset == 0 || anchor == null
+        ? null
+        : _shiftDays(anchor, 7 * _weekOffset);
 
     try {
       final res = await SessionScope.read(context)
           .api
-          .get('/team/roster?from=$from&days=7');
+          .get('/team/roster?days=7${from == null ? '' : '&from=$from'}');
       if (!mounted) return;
       setState(() {
+        // The server names the window it used. On this week that start *is*
+        // the company's today; on any other it is a day this screen already
+        // chose, so re-reading it then would teach the anchor nothing and
+        // walk it forwards every time an arrow was pressed.
+        if (_weekOffset == 0 && res['from'] is String) {
+          _anchor = res['from'] as String;
+        }
         _team = ((res['team'] as List?) ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(TeamRosterMember.fromJson)
@@ -674,8 +792,28 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
   }
 
   void _shift(int weeks) {
+    // Nothing has been learned from the server yet, so there is no day to
+    // count from. The arrows are disabled in that state; this is the belt to
+    // that's braces.
+    if (_anchor == null) return;
+
     setState(() => _weekOffset += weeks);
     _load();
+  }
+
+  /// `2026-08-30` + 7 → `2026-09-06`. `DateTime` does the carrying across
+  /// month and year ends, and the date is read as a plain calendar day — these
+  /// strings hold no timezone and giving them one would shift the day.
+  static String _shiftDays(String ymd, int days) {
+    final parsed = DateTime.tryParse(ymd);
+
+    if (parsed == null) return ymd;
+
+    final moved = DateTime(parsed.year, parsed.month, parsed.day + days);
+
+    return '${moved.year.toString().padLeft(4, '0')}-'
+        '${moved.month.toString().padLeft(2, '0')}-'
+        '${moved.day.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -695,7 +833,10 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  onPressed: () => _shift(-1),
+                  // Dead until the server has said what day it is. A control
+                  // that would send a week counted from nothing is worse than
+                  // one that is plainly not ready yet.
+                  onPressed: _anchor == null ? null : () => _shift(-1),
                   icon: const Icon(Icons.chevron_left),
                   tooltip: t.rosterPreviousWeek,
                 ),
@@ -710,7 +851,7 @@ class _TeamRosterTabState extends State<_TeamRosterTab> with RefreshOnShow {
                   style: theme.textTheme.titleSmall,
                 ),
                 IconButton(
-                  onPressed: () => _shift(1),
+                  onPressed: _anchor == null ? null : () => _shift(1),
                   icon: const Icon(Icons.chevron_right),
                   tooltip: t.rosterNextWeek,
                 ),
@@ -853,6 +994,493 @@ class _TeamRosterDayRow extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Team leave calendar (B4.6)
+// ---------------------------------------------------------------------------
+
+/// Who on the team is off, a month at a time.
+///
+/// **Date-major, unlike the roster tab beside it.** That one is read down a
+/// person to see their week; this one answers "can I let a second person go
+/// that week", which is a question about a day.
+///
+/// **The month is never built from `DateTime.now()`.** Leave is judged in the
+/// company's timezone and the phone is wherever its owner is, so for part of
+/// every day the two disagree about the date — and on the 1st or the 31st they
+/// disagree about the *month*, which would open this screen on the wrong grid
+/// with nothing to say it had. The first load asks for no month at all, reads
+/// the answer out of the reply, and the arrows count from there.
+class _TeamLeaveTab extends StatefulWidget {
+  const _TeamLeaveTab({required this.visible});
+
+  final ValueListenable<bool> visible;
+
+  @override
+  State<_TeamLeaveTab> createState() => _TeamLeaveTabState();
+}
+
+class _TeamLeaveTabState extends State<_TeamLeaveTab> with RefreshOnShow {
+  TeamLeaveMonth? _month;
+  bool _loading = true;
+  String? _error;
+
+  /// `YYYY-MM`, learned from the server's own reply and then moved by the
+  /// arrows. Null until the first one lands.
+  String? _anchor;
+
+  /// The date whose people are listed under the grid.
+  String? _selected;
+
+  @override
+  ValueListenable<bool> get visibility => widget.visible;
+
+  @override
+  Future<void> refresh() => _load(silent: true);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    setState(() {
+      _loading = !silent;
+      _error = null;
+    });
+
+    final anchor = _anchor;
+
+    try {
+      final res = await SessionScope.read(context)
+          .api
+          .get('/team/leave-calendar${anchor == null ? '' : '?month=$anchor'}');
+
+      if (!mounted) return;
+
+      final month = TeamLeaveMonth.fromJson(res);
+
+      setState(() {
+        _month = month;
+        // The server names the month it actually answered for, which is the
+        // only trustworthy statement of what "this month" means here.
+        _anchor = month.month;
+        _selected = _openOn(month);
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // Read here rather than before the request: the first load runs from
+      // initState, and reaching for the strings there registers an
+      // inherited-widget dependency before the element has finished
+      // building, which asserts.
+      final t = context.t;
+      setState(() {
+        _error = e.text(t);
+        _loading = false;
+      });
+    }
+  }
+
+  /// Which cell to open on.
+  ///
+  /// A day the manager had already picked wins, so a background refresh does
+  /// not move the list out from under them. Otherwise today, and failing that
+  /// the first day somebody is off — landing on an empty 1st when the leave is
+  /// all in the third week makes the screen look broken.
+  String? _openOn(TeamLeaveMonth month) {
+    final held = _selected;
+
+    if (held != null && month.days.any((d) => d.date == held)) {
+      return held;
+    }
+
+    if (month.days.any((d) => d.date == month.today)) {
+      return month.today;
+    }
+
+    for (final day in month.days) {
+      if (day.people.isNotEmpty) return day.date;
+    }
+
+    return month.days.isEmpty ? null : month.days.first.date;
+  }
+
+  void _step(int months) {
+    final anchor = _anchor;
+
+    // Nothing has been learned yet, so there is nothing to count from. The
+    // arrows are disabled in that state; this is the belt to that's braces.
+    if (anchor == null) return;
+
+    setState(() {
+      _anchor = MonthBar.shiftMonth(anchor, months);
+      // A different month holds no selection — _openOn picks a new one.
+      _selected = null;
+    });
+
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final month = _month;
+
+    return AsyncView(
+      loading: _loading,
+      error: _error,
+      onRetry: _load,
+      child: month == null
+          ? const SizedBox.shrink()
+          : Column(
+              children: [
+                MonthBar(
+                  label: MonthBar.monthLabel(t, month.month),
+                  // Both arrows live, unlike the attendance board's forward
+                  // one: leave is booked ahead, so next month is the most
+                  // useful month this can answer for.
+                  onBack: _anchor == null ? null : () => _step(-1),
+                  onForward: _anchor == null ? null : () => _step(1),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: month.teamSize == 0
+                        ? ListView(
+                            children: [
+                              const SizedBox(height: 80),
+                              EmptyState(
+                                icon: Icons.event_busy_outlined,
+                                title: t.rosterEmptyTitle,
+                                subtitle: t.rosterEmptySubtitle,
+                              ),
+                            ],
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 12, 32),
+                            children: [
+                              _LeaveMonthGrid(
+                                days: month.days,
+                                today: month.today,
+                                selected: _selected,
+                                onTap: (date) => setState(() => _selected = date),
+                              ),
+                              const SizedBox(height: 16),
+                              ..._dayDetail(context, month),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// The selected day, spelled out under the grid.
+  List<Widget> _dayDetail(BuildContext context, TeamLeaveMonth month) {
+    final t = context.t;
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final selected = _selected;
+
+    if (selected == null) return const [];
+
+    final day = month.days.where((d) => d.date == selected).firstOrNull;
+
+    if (day == null) return const [];
+
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              Fmt.longDate(t, day.date),
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
+          Text(
+            day.people.isEmpty
+                ? t.leaveCalendarNobodyOff
+                : t.leaveCalendarPeopleOff(day.people.length),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+      if (day.holiday case final String holiday) ...[
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Icon(Icons.celebration_outlined, size: 16, color: colors.neutral),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                holiday,
+                style: theme.textTheme.bodySmall?.copyWith(color: colors.neutral),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 8),
+      if (day.people.isEmpty && month.isQuiet)
+        EmptyState(
+          icon: Icons.beach_access_outlined,
+          title: t.leaveCalendarQuietTitle,
+          subtitle: t.leaveCalendarQuietSubtitle,
+        )
+      else
+        Card(
+          child: Column(
+            children: [
+              for (var i = 0; i < day.people.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _LeavePersonRow(person: day.people[i]),
+              ],
+            ],
+          ),
+        ),
+    ];
+  }
+}
+
+/// The month grid itself.
+///
+/// **Weeks start on Monday, and that is a layout choice rather than a claim
+/// about the working week.** Which days are a weekend is the company's setting
+/// and arrives per-day on each cell, so a company that works Sunday to Thursday
+/// gets its own days shaded correctly however the rows happen to break.
+class _LeaveMonthGrid extends StatelessWidget {
+  const _LeaveMonthGrid({
+    required this.days,
+    required this.today,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final List<TeamLeaveDay> days;
+  final String today;
+  final String? selected;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final theme = Theme.of(context);
+
+    if (days.isEmpty) return const SizedBox.shrink();
+
+    final first = DateTime.tryParse(days.first.date);
+    final blanks = first == null ? 0 : first.weekday - DateTime.monday;
+
+    final cells = <Widget>[
+      for (var i = 0; i < blanks; i++) const SizedBox.shrink(),
+      for (final day in days)
+        _LeaveCell(
+          day: day,
+          isToday: day.date == today,
+          isSelected: day.date == selected,
+          onTap: () => onTap(day.date),
+        ),
+    ];
+
+    final rows = <Widget>[];
+
+    for (var i = 0; i < cells.length; i += 7) {
+      rows.add(Row(
+        children: [
+          for (var c = 0; c < 7; c++)
+            Expanded(
+              child: i + c < cells.length ? cells[i + c] : const SizedBox.shrink(),
+            ),
+        ],
+      ));
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (var weekday = DateTime.monday; weekday <= DateTime.sunday; weekday++)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    Fmt.weekdayShort(t, weekday),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ...rows,
+      ],
+    );
+  }
+}
+
+/// One day of the month.
+///
+/// The count sits **inside** the cell rather than under it: a dot alone says
+/// somebody is off and a manager then has to tap every cell to find out how
+/// many, which is the whole question.
+class _LeaveCell extends StatelessWidget {
+  const _LeaveCell({
+    required this.day,
+    required this.isToday,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final TeamLeaveDay day;
+  final bool isToday;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final t = context.t;
+
+    final off = day.people.length;
+
+    // Amber the moment anything on the day is unsettled: the manager's question
+    // is whether the day is already spoken for, and a pending request is
+    // exactly the one they are about to decide.
+    final tone = day.people.any((p) => p.isPending) ? colors.late : colors.leave;
+
+    final muted = day.isWeekend || day.holiday != null;
+
+    return Semantics(
+      selected: isSelected,
+      label: '${Fmt.shortDate(t, day.date)}, '
+          '${off == 0 ? t.leaveCalendarNobodyOff : t.leaveCalendarPeopleOff(off)}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              // The same neutral darkening the attendance grid uses, for the
+              // same reason and so that the two calendars in this app agree
+              // about what "picked" looks like. Accent is in the leave family
+              // here, and a selected day tinted with it reads as a day off.
+              color: isSelected
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+                  : (muted ? theme.colorScheme.surfaceContainerHighest : null),
+              borderRadius: BorderRadius.circular(8),
+              border: isToday
+                  ? Border.all(color: colors.accent, width: 1.5)
+                  : null,
+            ),
+            // Scaled down rather than clipped: at 2× text this cell is still a
+            // square seventh of the width, and an overflowing calendar is a
+            // calendar with days missing off the bottom.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${day.dayOfMonth}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                        color: muted
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      height: 16,
+                      child: off == 0
+                          ? null
+                          : Container(
+                              alignment: Alignment.center,
+                              constraints: const BoxConstraints(minWidth: 16),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                color: tone.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$off',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: tone,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One person on the selected day.
+class _LeavePersonRow extends StatelessWidget {
+  const _LeavePersonRow({required this.person});
+
+  final TeamLeavePerson person;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final t = context.t;
+
+    final tone = person.isPending ? colors.late : colors.leave;
+
+    // The whole stretch, which is why the day it falls on is not printed here:
+    // "29 Jul – 3 Aug" is what tells a manager this began before the month did.
+    final dates = person.isSingleDay
+        ? Fmt.longDate(t, person.startDate)
+        : t.dateRange(
+            Fmt.shortDate(t, person.startDate),
+            Fmt.shortDate(t, person.endDate),
+          );
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: tone.withValues(alpha: 0.15),
+        child: Icon(Icons.beach_access_outlined, size: 18, color: tone),
+      ),
+      title: Text(person.name),
+      subtitle: Text(
+        [
+          if (person.leaveType case final String type) type,
+          dates,
+          if (person.isHalfDay) t.leaveCalendarHalfDay,
+        ].join(' · '),
+      ),
+      trailing: person.isPending
+          ? Chip(
+              label: Text(t.leaveCalendarPending),
+              labelStyle: theme.textTheme.labelSmall?.copyWith(color: colors.late),
+              backgroundColor: colors.late.withValues(alpha: 0.15),
+              side: BorderSide.none,
+              visualDensity: VisualDensity.compact,
+            )
+          : null,
     );
   }
 }

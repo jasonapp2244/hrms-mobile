@@ -33,6 +33,10 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
   bool _loading = true;
   String? _error;
 
+  /// True when [_error] is one no retry can clear — the account has no employee
+  /// record. See [ApiErrorText.isMissingEmployeeRecord].
+  bool _fatal = false;
+
   /// Debounces the search so a five-letter name is one request, not five.
   Timer? _debounce;
 
@@ -58,6 +62,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _fatal = false;
     });
 
     try {
@@ -81,9 +86,9 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       // building, which asserts.
       final t = context.t;
       setState(() {
-        _error = e.error == 'forbidden'
-            ? t.directoryNoEmployeeRecord
-            : e.text(t);
+        // No retry offered for this one: it is the account, not the network.
+        _fatal = e.isMissingEmployeeRecord;
+        _error = _fatal ? t.directoryNoEmployeeRecord : e.text(t);
         _loading = false;
       });
     }
@@ -144,7 +149,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _load,
+        onRetry: _fatal ? null : _load,
         child: directory == null || directory.people.isEmpty
             ? EmptyState(
                 icon: Icons.people_outline,

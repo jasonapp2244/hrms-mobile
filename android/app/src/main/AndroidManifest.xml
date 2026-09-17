@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Flutter only declares INTERNET in the debug and profile manifests, for
          the tooling's own use. Without it here a RELEASE build ships with no
@@ -23,6 +24,29 @@
          declaration path. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- **Removed, not omitted.** `file_picker` declares four broad storage
+         permissions in its own manifest — READ_EXTERNAL_STORAGE and the three
+         READ_MEDIA_* — and manifest merging pulls them into this app whether
+         or not it uses the modes that need them. It does not: the leave
+         attachment (B4.1) is picked with FileType.custom, which is
+         ACTION_OPEN_DOCUMENT, and that grants access to the one file the user
+         chose with **no permission at all**.
+
+         Left in, they would be a privacy expansion the feature does not need
+         and a Play Store problem it does not have to have: READ_MEDIA_IMAGES
+         and READ_MEDIA_VIDEO put an app on the Photo and Video Permissions
+         policy path, which wants a declaration and a justification for access
+         this app never exercises. The kind of thing that is found at review
+         rather than in testing, because nothing about it fails at runtime.
+
+         If a future screen ever needs to browse the gallery directly, the
+         right move is to delete the matching line here deliberately — not to
+         wonder why the picker stopped working. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove"/>
 
     <!-- Both of these are REQUIRED declarations that undo a default, and
          leaving them out is a Play Store distribution bug rather than a

@@ -4,4 +4,18 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Plain HTTP, for development only.
+
+         Android has blocked cleartext traffic by default since API 28, so a
+         debug build pointed at `php artisan serve` on a development machine
+         (http://192.168.x.x:8000) fails with no error the user can see — the
+         request simply never leaves the handset, and the app looks like it
+         cannot reach the server.
+
+         This file is the **debug** manifest and is never merged into a release
+         build, so the release APK and app bundle stay cleartext-blocked. The
+         production API is https:// and preflight fails a deploy whose APP_URL
+         is not — see `emp:preflight`. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
