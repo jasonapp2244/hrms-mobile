@@ -784,7 +784,16 @@ class _DayRow extends StatelessWidget {
                     t.historyInAt(_clock(day.firstIn!)) +
                         (day.lastOut != null
                             ? t.historyOutAt(_clock(day.lastOut!))
-                            : t.historyStillOpen),
+                            : t.historyStillOpen) +
+                        // More than a single in-and-out. The two times above
+                        // are the FIRST entry and the LAST exit, so the total
+                        // beside them does not span the gap between — a day
+                        // running 15:09 to 16:42 can read 22m and be right.
+                        // Without this the row looks like broken arithmetic,
+                        // and the count is the cheapest thing that explains it.
+                        (day.punches > 2
+                            ? t.historyPunchCount(day.punches)
+                            : ''),
                   )
                 : null),
       trailing: day.workedMinutes > 0

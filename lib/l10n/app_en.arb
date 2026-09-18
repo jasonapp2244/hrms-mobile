@@ -378,6 +378,16 @@
     "@historyStillOpen": {
         "description": "Appended where there is an entry punch and no exit yet. Keep the separator."
     },
+    "historyPunchCount": " · {count} punches",
+    "@historyPunchCount": {
+        "description": "Appended only on a day with more than one in-and-out. The times beside it are the FIRST entry and the LAST exit, so the total does not span them; this is what tells the reader why. Keep the separator.",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "8"
+            }
+        }
+    },
     "documentsTitle": "My documents",
     "documentsEmptyTitle": "Nothing on file yet",
     "documentsEmptySubtitle": "Contracts, ID and certificates HR files against your record appear here.",

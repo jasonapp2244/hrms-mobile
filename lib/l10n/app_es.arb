@@ -129,6 +129,7 @@
     "historyInAt": "Entrada {clock}",
     "historyOutAt": " · Salida {clock}",
     "historyStillOpen": " · aún abierto",
+    "historyPunchCount": " · {count} fichajes",
     "documentsTitle": "Mis documentos",
     "documentsEmptyTitle": "Aún no hay nada archivado",
     "documentsEmptySubtitle": "Los contratos, documentos de identidad y certificados que RR. HH. archive en tu ficha aparecerán aquí.",
