@@ -113,7 +113,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: RefreshIndicator(
           onRefresh: _load,
           child: _days.isEmpty

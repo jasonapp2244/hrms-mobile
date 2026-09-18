@@ -348,7 +348,8 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: calendar ? _calendarBody(context) : _listBody(context),
       ),
     );

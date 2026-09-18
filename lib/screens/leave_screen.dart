@@ -175,7 +175,8 @@ class _LeaveScreenState extends State<LeaveScreen> with RefreshOnShow {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: RefreshIndicator(
           onRefresh: _load,
           child: ListView(

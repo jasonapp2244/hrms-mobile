@@ -16,11 +16,29 @@ class AsyncView extends StatelessWidget {
     required this.child,
     this.error,
     this.onRetry,
+    this.permanent = false,
   });
 
   final bool loading;
   final String? error;
   final VoidCallback? onRetry;
+
+  /// This failure is a settled fact about the account, not a failed attempt.
+  ///
+  /// Only one condition sets it today: the signed-in account has no employee
+  /// record, so there is no attendance, leave, roster or document shelf to
+  /// answer with, and there never will be on this login. See
+  /// [ApiErrorText.isMissingEmployeeRecord].
+  ///
+  /// It decides **both** halves of how the state is drawn, which is the point
+  /// of it being one flag rather than two. The retry is dropped, because a
+  /// button that cannot work implies the failure is temporary. And the icon
+  /// stops being a cut cloud: every screen drew one, so an administrator
+  /// opening the app was told, on each tab in turn, that the network was down.
+  /// It was not — the right message sat directly beneath a picture
+  /// contradicting it, which is how somebody ends up checking their wifi.
+  final bool permanent;
+
   final Widget child;
 
   @override
@@ -31,13 +49,22 @@ class AsyncView extends StatelessWidget {
 
     if (error != null) {
       final theme = Theme.of(context);
+      // A permanent refusal keeps no retry, whatever the caller passed: the
+      // rule belongs here, next to the flag that states it, rather than being
+      // restated as a ternary at each of the seven call sites.
+      final retry = permanent ? null : onRetry;
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off, size: 44, color: theme.colorScheme.outline),
+              Icon(
+                permanent ? Icons.badge_outlined : Icons.cloud_off,
+                size: 44,
+                color: theme.colorScheme.outline,
+              ),
               const SizedBox(height: 16),
               Text(
                 error!,
@@ -46,10 +73,10 @@ class AsyncView extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              if (onRetry != null) ...[
+              if (retry != null) ...[
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
-                  onPressed: onRetry,
+                  onPressed: retry,
                   icon: const Icon(Icons.refresh),
                   label: Text(context.t.actionTryAgain),
                   style: OutlinedButton.styleFrom(

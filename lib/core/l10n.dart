@@ -32,18 +32,23 @@ extension ApiErrorText on ApiException {
   /// True when the signed-in account has no employee record, and so no
   /// attendance, leave, schedule, documents or colleagues either.
   ///
-  /// `forbidden` is raised in exactly one place on this API — the resolver
-  /// every employee-facing endpoint goes through — so on those endpoints it
-  /// means this and nothing else.
+  /// Its own code on the wire rather than the generic `forbidden`, because
+  /// `forbidden` is not one condition. The API also raises it for an employee
+  /// reaching for somebody else's leave request and for one withdrawing
+  /// somebody else's correction — refusals that are about *that record*, not
+  /// about the account, and that a different handset or a different tap would
+  /// not hit. Matching on `forbidden` meant those two would have been
+  /// relabelled "this account has no employee record", which is simply untrue,
+  /// and stripped of the retry that could clear them.
   ///
   /// **Worth knowing because it is the one failure no retry can clear.** An HR
   /// or administrator account that was never linked to an employee saw the
-  /// ordinary error card on four tabs, each offering "Try again" for a
+  /// ordinary error card on every data tab, each offering "Try again" for a
   /// condition that will still be true on the hundredth press. The Profile tab
   /// already says the true thing — that this account belongs on the web
   /// dashboard — and the others now stop pretending the server is having a
   /// moment.
-  bool get isMissingEmployeeRecord => error == 'forbidden';
+  bool get isMissingEmployeeRecord => error == 'no_employee_record';
 
   String text(AppLocalizations t) {
     if (isNetworkFailure) return t.errorNoConnection;

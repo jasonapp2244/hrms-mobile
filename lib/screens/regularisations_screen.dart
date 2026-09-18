@@ -169,7 +169,8 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: RefreshIndicator(
           onRefresh: _load,
           child: _requests.isEmpty

@@ -154,7 +154,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: _documents.isEmpty
             ? EmptyState(
                 icon: Icons.folder_open_outlined,

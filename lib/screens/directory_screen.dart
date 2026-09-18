@@ -149,7 +149,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       body: AsyncView(
         loading: _loading,
         error: _error,
-        onRetry: _fatal ? null : _load,
+        onRetry: _load,
+        permanent: _fatal,
         child: directory == null || directory.people.isEmpty
             ? EmptyState(
                 icon: Icons.people_outline,
