@@ -9,6 +9,7 @@ import '../core/session.dart';
 import '../core/tab_visibility.dart';
 import '../main.dart';
 import 'approvals_screen.dart';
+import 'hr_screen.dart';
 import 'history_screen.dart';
 import 'leave_screen.dart';
 import 'profile_screen.dart';
@@ -26,6 +27,7 @@ String tabLabel(AppLocalizations t, String id) => switch (id) {
       'leave' => t.tabLeave,
       'schedule' => t.tabSchedule,
       'team' => t.tabTeam,
+      'hr' => t.hrTitle,
       _ => t.tabProfile,
     };
 
@@ -258,6 +260,21 @@ class _HomeShellState extends State<HomeShell> {
           label: tabLabel(t, 'team'),
           screen: ApprovalsScreen(
             visible: _flagFor('team', visible: _index == 4),
+          ),
+        ),
+      // HR's own area (client requirement, 2026-09-22). Drawn on the server's
+      // say-so rather than on a permission read here: `hasHrArea` is the `can`
+      // block from /auth/me, so the tab and the route group cannot disagree
+      // about who HR is. An older server sends no block and the tab is absent,
+      // which is the safe direction for a screen that spends leave balance.
+      if (user?.hasHrArea == true)
+        _Tab(
+          id: 'hr',
+          icon: Icons.badge_outlined,
+          selectedIcon: Icons.badge,
+          label: tabLabel(t, 'hr'),
+          screen: HrScreen(
+            visible: _flagFor('hr', visible: _index == (user?.leadsATeam == true ? 5 : 4)),
           ),
         ),
       _Tab(

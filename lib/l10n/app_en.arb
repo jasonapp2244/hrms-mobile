@@ -1214,6 +1214,111 @@
     "gateOpenStore": "Open the store",
     "gateNoStore": "Could not open the store. Search for the app by name.",
     "gateFooter": "Attendance recorded on the web dashboard is unaffected. Speak to your manager if you need to clock in meanwhile.",
+    "hrTitle": "HR",
+    "@hrTitle": {
+        "description": "Title of the HR area (client requirement, 2026-09-22). Deliberately not 'Admin' — the area is HR's leave desk and employee register, not system administration, which has no app at all."
+    },
+    "hrTabApprovals": "Approvals",
+    "hrTabPeople": "People",
+    "hrApprovalsEmptyTitle": "Nothing waiting",
+    "hrApprovalsEmptyBody": "Requests reach you once a line manager has seconded them, or straight away for anybody who reports to nobody.",
+    "hrApprovalsSeconded": "Seconded by {manager}",
+    "@hrApprovalsSeconded": {
+        "description": "Names the manager who passed the request up at step one.",
+        "placeholders": { "manager": { "type": "String" } }
+    },
+    "hrApprovalsNoManagerStep": "No manager step — this person reports to nobody",
+    "hrApprovalsBalance": "{available} of {entitled} days left",
+    "@hrApprovalsBalance": {
+        "description": "The balance for the leave type being requested. The number that decides the answer.",
+        "placeholders": {
+            "available": { "type": "String" },
+            "entitled": { "type": "String" }
+        }
+    },
+    "hrApprovalsBalanceUncapped": "{used} days taken — this type is uncapped",
+    "@hrApprovalsBalanceUncapped": {
+        "description": "Shown instead of a remaining figure for a leave type with no annual cap, where 'available' would be meaningless.",
+        "placeholders": { "used": { "type": "String" } }
+    },
+    "hrApprovalsWouldExceed": "Approving this would take them past their entitlement",
+    "@hrApprovalsWouldExceed": {
+        "description": "Warning shown before the tap. The server makes the same comparison approve() will make, so the refusal is not a surprise after the fact."
+    },
+    "hrApprovalsClash": "{count, plural, =1{1 other in this department is off over these dates} other{{count} others in this department are off over these dates}}",
+    "@hrApprovalsClash": {
+        "placeholders": { "count": { "type": "int" } }
+    },
+    "hrApprovalsApprove": "Approve",
+    "hrApprovalsReject": "Reject",
+    "hrApprovalsApproveTitle": "Approve {employee}'s leave?",
+    "@hrApprovalsApproveTitle": {
+        "placeholders": { "employee": { "type": "String" } }
+    },
+    "hrApprovalsApproveBody": "The days are deducted from their balance as soon as you confirm. They are notified.",
+    "hrApprovalsRejectTitle": "Reject {employee}'s leave?",
+    "@hrApprovalsRejectTitle": {
+        "placeholders": { "employee": { "type": "String" } }
+    },
+    "hrApprovalsRejectBody": "Nothing is deducted. {employee} sees the reason you give.",
+    "@hrApprovalsRejectBody": {
+        "placeholders": { "employee": { "type": "String" } }
+    },
+    "hrApprovalsNote": "Note (optional)",
+    "hrApprovalsReason": "Reason",
+    "hrApprovalsApproved": "Approved. The days have been deducted.",
+    "hrApprovalsRejected": "Rejected.",
+    "hrDecidedTitle": "Recently decided",
+    "hrDecidedEmpty": "Nothing decided yet.",
+    "hrDecidedBy": "Decided by {name}",
+    "@hrDecidedBy": {
+        "placeholders": { "name": { "type": "String" } }
+    },
+    "hrPeopleSearch": "Search by name or staff number",
+    "hrPeopleEmptyTitle": "Nobody found",
+    "hrPeopleEmptyBody": "Try a different name, or include people who have left.",
+    "hrPeopleIncludeLeavers": "Include people who have left",
+    "hrPeopleStatusActive": "Active",
+    "hrPeopleStatusInactive": "Inactive",
+    "hrPeopleStatusTerminated": "Left",
+    "hrPersonPersonal": "Personal",
+    "hrPersonEmployment": "Employment",
+    "hrPersonEmergency": "Emergency contact",
+    "hrPersonBalances": "Leave balances",
+    "hrPersonAttendance": "Last 30 days",
+    "hrPersonLeaveHistory": "Leave history",
+    "hrPersonNoLeave": "No leave on record.",
+    "hrPersonDateOfBirth": "Date of birth",
+    "hrPersonGender": "Gender",
+    "hrPersonNationalId": "National ID",
+    "hrPersonBloodGroup": "Blood group",
+    "hrPersonAddress": "Address",
+    "hrPersonPersonalEmail": "Personal email",
+    "hrPersonHireDate": "Started",
+    "hrPersonWorkMode": "Work mode",
+    "hrPersonManager": "Reports to",
+    "hrPersonShift": "Standing shift",
+    "hrPersonPhone": "Phone",
+    "hrPersonRelation": "Relationship",
+    "hrPersonSignIn": "Sign-in account",
+    "hrPersonSignInNone": "No account — this person cannot sign in",
+    "@hrPersonSignInNone": {
+        "description": "The question HR is asked most often about somebody who says the app will not let them in. Accounts are created on the web."
+    },
+    "hrPersonSignInDisabled": "Account deactivated",
+    "hrPersonDaysWorked": "Days worked",
+    "hrPersonLate": "Late",
+    "hrPersonEarlyLeave": "Left early",
+    "hrPersonOnTime": "On time",
+    "hrPersonReadOnly": "Records are read-only in the app. Edit on the web dashboard.",
+    "@hrPersonReadOnly": {
+        "description": "Stated rather than left to be discovered by looking for an edit button. Editing a record one-handed writes an audit trail nobody would check."
+    },
+    "hrOffline": "Decisions need a connection. Nothing is queued, so a request cannot be decided twice.",
+    "@hrOffline": {
+        "description": "Punches queue offline and sync later; approvals deliberately do not, because a decision applied twice spends the balance twice."
+    }
+    ,
     "notificationsUntitled": "Notification",
     "@notificationsUntitled": {
         "description": "Stands in for the title of a notification the server sent without one. Should never appear in practice."

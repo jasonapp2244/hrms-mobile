@@ -89,6 +89,48 @@ class EmployeeRef {
       );
 }
 
+/// What the signed-in account may do, as the **server** decides it.
+///
+/// Every one of these could be worked out from `permissions`, and for a while
+/// one of them was: `leadsATeam` is `approve-leave` plus a direct report,
+/// because the permission alone gave a permanently empty Team tab to every HR
+/// user. That rule then existed in two languages, and the HR section would have
+/// made it three — each free to drift from the route group it is supposed to
+/// describe.
+///
+/// So the server states the conclusion and the app reads it. A capability is a
+/// promise that the matching endpoints will answer, which is what a tab
+/// actually needs to know; a permission is only an input to that question.
+///
+/// **Absent for an older server**, which is why every field has a fallback at
+/// the call site rather than defaulting to true here. A build that cannot tell
+/// should show less, not more.
+class Capabilities {
+  const Capabilities({
+    required this.leadTeam,
+    required this.decideLeave,
+    required this.viewEmployees,
+  });
+
+  /// The Team tab — a line manager with somebody reporting to them.
+  final bool leadTeam;
+
+  /// The HR leave desk: the final, company-wide decision that spends the days.
+  /// `manage-leave` **and** `approve-leave`, matching the route group.
+  final bool decideLeave;
+
+  /// The employee register. Read-only on the phone.
+  final bool viewEmployees;
+
+  bool get anyHrArea => decideLeave || viewEmployees;
+
+  factory Capabilities.fromJson(Map<String, dynamic> j) => Capabilities(
+        leadTeam: j['lead_team'] == true,
+        decideLeave: j['decide_leave'] == true,
+        viewEmployees: j['view_employees'] == true,
+      );
+}
+
 class AppUser {
   AppUser({
     required this.id,
@@ -98,6 +140,7 @@ class AppUser {
     required this.permissions,
     this.company,
     this.employee,
+    this.can,
   });
 
   final int id;
@@ -111,6 +154,10 @@ class AppUser {
   /// Such an account signs in fine and then gets 403 from every
   /// employee-scoped endpoint, so the UI has to check this rather than assume.
   final EmployeeRef? employee;
+
+  /// What the server says this account may do. Null against an older build of
+  /// the API, which is why each getter below falls back rather than assuming.
+  final Capabilities? can;
 
   /// Holds the permission the manager endpoints are gated on.
   ///
@@ -131,7 +178,27 @@ class AppUser {
   /// On the web the two never met, because `/manager/*` is gated `role:manager`
   /// as well and refuses HR at the door. The app had no equivalent, so it
   /// advertised an area that could not do anything.
-  bool get leadsATeam => canApproveLeave && employee?.isManager == true;
+  /// Read from the server, with the old derivation as the fallback.
+  ///
+  /// The rule has not changed — the permission **and** somebody to use it on —
+  /// only where it is decided. An app talking to a server that predates the
+  /// `can` block still works it out locally; one talking to a current server
+  /// takes the answer, so the tab and the route group cannot disagree.
+  bool get leadsATeam =>
+      can?.leadTeam ?? (canApproveLeave && employee?.isManager == true);
+
+  /// The HR leave desk — the final, company-wide decision.
+  ///
+  /// **No local fallback, deliberately.** This one spends leave balance, and
+  /// an app that cannot ask the server whether it may must not decide for
+  /// itself that it may. An older server simply has no HR section.
+  bool get decidesLeave => can?.decideLeave ?? false;
+
+  /// The employee register. Read-only, and the same rule as above.
+  bool get viewsEmployees => can?.viewEmployees ?? false;
+
+  /// Whether to draw the HR tab at all.
+  bool get hasHrArea => decidesLeave || viewsEmployees;
 
   bool get hasEmployeeRecord => employee != null;
 
@@ -153,6 +220,9 @@ class AppUser {
             : null,
         employee: j['employee'] is Map<String, dynamic>
             ? EmployeeRef.fromJson(j['employee'] as Map<String, dynamic>)
+            : null,
+        can: j['can'] is Map<String, dynamic>
+            ? Capabilities.fromJson(j['can'] as Map<String, dynamic>)
             : null,
       );
 }
@@ -1313,5 +1383,380 @@ class AppNotification {
         // this build has never heard of is null rather than a crash.
         route: PushRoute.parse(j['route']),
         readAt: _str(j['read_at']),
+      );
+}
+
+// ---------------------------------------------------------------------------
+// HR (client requirement, 2026-09-22)
+//
+// The second decision surface, not a copy of the manager's. `PendingApproval`
+// above is the *manager* step — approving it passes a request up and spends
+// nothing. Everything below belongs to the step that commits the days, which
+// is why it carries a balance and the manager's own note: HR is deciding on
+// somebody a manager has already seconded, and needs to know both.
+// ---------------------------------------------------------------------------
+
+/// What is left of one leave type, for one person, this year.
+///
+/// [capped] is sent separately rather than inferred from [available] being
+/// zero: an uncapped type has no meaningful "available", and reading a zero
+/// there as "none left" would refuse leave nobody is short of.
+class HrBalance {
+  const HrBalance({
+    required this.entitled,
+    required this.used,
+    required this.available,
+    required this.capped,
+    this.leaveType,
+    this.carried = 0,
+    this.wouldExceed = false,
+  });
+
+  final double entitled;
+  final double carried;
+  final double used;
+  final double available;
+  final bool capped;
+
+  /// Null on the balance attached to a pending request, which is already
+  /// labelled by the request's own leave type.
+  final String? leaveType;
+
+  /// The server making the same comparison `approve()` will make, up front.
+  /// Finding out after the tap is the web's behaviour; a phone should say so
+  /// before somebody commits to it.
+  final bool wouldExceed;
+
+  factory HrBalance.fromJson(Map<String, dynamic> j) => HrBalance(
+        leaveType: _str(j['leave_type']),
+        entitled: _toDouble(j['entitled']),
+        carried: _toDouble(j['carried']),
+        used: _toDouble(j['used']),
+        available: _toDouble(j['available']),
+        capped: j['capped'] == true,
+        wouldExceed: j['would_exceed'] == true,
+      );
+}
+
+/// One request sitting with HR for the final decision.
+class HrPendingLeave {
+  const HrPendingLeave({
+    required this.id,
+    required this.employee,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.days,
+    required this.isHalfDay,
+    required this.clashes,
+    this.employeeCode,
+    this.department,
+    this.office,
+    this.reason,
+    this.attachmentName,
+    this.managerApprovedBy,
+    this.managerNote,
+    this.balance,
+  });
+
+  final int id;
+  final String employee;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final double days;
+  final bool isHalfDay;
+  final String? employeeCode;
+  final String? department;
+  final String? office;
+  final String? reason;
+
+  /// Null when the file is gone from disk even though the name survives — the
+  /// same rule `LeaveRequest` applies, because a paperclip that opens nothing
+  /// is worse than no paperclip.
+  final String? attachmentName;
+
+  /// Who seconded it at the manager step, and what they said. Both null for an
+  /// employee with no line manager, whose request skips that step entirely —
+  /// which is an answer rather than a gap.
+  final String? managerApprovedBy;
+  final String? managerNote;
+
+  final HrBalance? balance;
+
+  /// Who else in the same department is already off over these dates.
+  ///
+  /// The department rather than the whole company: company-wide would be every
+  /// approved day off in the business that week, which is true and unreadable.
+  final List<LeaveClash> clashes;
+
+  factory HrPendingLeave.fromJson(Map<String, dynamic> j) => HrPendingLeave(
+        id: _toInt(j['id']),
+        employee: '${j['employee'] ?? ''}',
+        employeeCode: _str(j['employee_code']),
+        department: _str(j['department']),
+        office: _str(j['office']),
+        leaveType: '${j['leave_type'] ?? ''}',
+        startDate: '${j['start_date'] ?? ''}',
+        endDate: '${j['end_date'] ?? ''}',
+        days: _toDouble(j['days']),
+        isHalfDay: j['is_half_day'] == true,
+        reason: _str(j['reason']),
+        attachmentName:
+            j['has_attachment'] == true ? _str(j['attachment_name']) : null,
+        managerApprovedBy: _str(j['manager_approved_by']),
+        managerNote: _str(j['manager_note']),
+        balance: j['balance'] is Map<String, dynamic>
+            ? HrBalance.fromJson(j['balance'] as Map<String, dynamic>)
+            : null,
+        clashes: ((j['clashes'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LeaveClash.fromJson)
+            .toList(),
+      );
+}
+
+/// A request HR has already settled, for the "what did I do yesterday" list.
+class HrDecidedLeave {
+  const HrDecidedLeave({
+    required this.id,
+    required this.employee,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.days,
+    required this.status,
+    this.decidedBy,
+    this.decisionNote,
+  });
+
+  final int id;
+  final String employee;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final double days;
+
+  /// approved · rejected · cancelled
+  final String status;
+  final String? decidedBy;
+  final String? decisionNote;
+
+  factory HrDecidedLeave.fromJson(Map<String, dynamic> j) => HrDecidedLeave(
+        id: _toInt(j['id']),
+        employee: '${j['employee'] ?? ''}',
+        leaveType: '${j['leave_type'] ?? ''}',
+        startDate: '${j['start_date'] ?? ''}',
+        endDate: '${j['end_date'] ?? ''}',
+        days: _toDouble(j['days']),
+        status: '${j['status'] ?? ''}',
+        decidedBy: _str(j['decided_by']),
+        decisionNote: _str(j['decision_note']),
+      );
+}
+
+/// One row of the employee register.
+class HrEmployeeSummary {
+  const HrEmployeeSummary({
+    required this.id,
+    required this.name,
+    required this.status,
+    this.employeeCode,
+    this.department,
+    this.designation,
+    this.office,
+    this.photoUrl,
+    this.email,
+    this.phone,
+  });
+
+  final int id;
+  final String name;
+
+  /// active · inactive · terminated. Shown rather than filtered out, because a
+  /// register is asked about leavers and a directory is not.
+  final String status;
+
+  final String? employeeCode;
+  final String? department;
+  final String? designation;
+  final String? office;
+  final String? photoUrl;
+  final String? email;
+  final String? phone;
+
+  bool get isActive => status == 'active';
+
+  factory HrEmployeeSummary.fromJson(Map<String, dynamic> j) =>
+      HrEmployeeSummary(
+        id: _toInt(j['id']),
+        name: '${j['name'] ?? ''}',
+        status: '${j['status'] ?? ''}',
+        employeeCode: _str(j['employee_code']),
+        department: _str(j['department']),
+        designation: _str(j['designation']),
+        office: _str(j['office']),
+        photoUrl: _str(j['photo_url']),
+        email: _str(j['email']),
+        phone: _str(j['phone']),
+      );
+}
+
+/// The last month of attendance, counted rather than listed.
+class HrAttendanceSummary {
+  const HrAttendanceSummary({
+    required this.from,
+    required this.to,
+    required this.daysWorked,
+    required this.late,
+    required this.earlyLeave,
+    required this.onTime,
+  });
+
+  final String from;
+  final String to;
+  final int daysWorked;
+  final int late;
+  final int earlyLeave;
+  final int onTime;
+
+  factory HrAttendanceSummary.fromJson(Map<String, dynamic> j) =>
+      HrAttendanceSummary(
+        from: '${j['from'] ?? ''}',
+        to: '${j['to'] ?? ''}',
+        daysWorked: _toInt(j['days_worked']),
+        late: _toInt(j['late']),
+        earlyLeave: _toInt(j['early_leave']),
+        onTime: _toInt(j['on_time']),
+      );
+}
+
+/// The full record, as only `manage-employees` may read it.
+///
+/// Everything the directory deliberately refuses to say. The fields are
+/// nullable throughout because a record is filled in over time and a half-empty
+/// one is ordinary rather than broken — the screen omits a row instead of
+/// printing an em dash under every heading.
+class HrEmployeeRecord {
+  const HrEmployeeRecord({
+    required this.summary,
+    required this.balances,
+    this.attendance,
+    this.dateOfBirth,
+    this.gender,
+    this.hireDate,
+    this.workMode,
+    this.personalEmail,
+    this.address,
+    this.city,
+    this.country,
+    this.nationalId,
+    this.bloodGroup,
+    this.emergencyName,
+    this.emergencyPhone,
+    this.emergencyRelation,
+    this.manager,
+    this.shift,
+    this.hasLogin = false,
+    this.loginEmail,
+    this.loginActive,
+  });
+
+  final HrEmployeeSummary summary;
+  final List<HrBalance> balances;
+  final HrAttendanceSummary? attendance;
+
+  final String? dateOfBirth;
+  final String? gender;
+  final String? hireDate;
+  final String? workMode;
+  final String? personalEmail;
+  final String? address;
+  final String? city;
+  final String? country;
+  final String? nationalId;
+  final String? bloodGroup;
+  final String? emergencyName;
+  final String? emergencyPhone;
+  final String? emergencyRelation;
+  final String? manager;
+  final String? shift;
+
+  /// Whether this person can sign in at all — the question HR is asked most
+  /// often about somebody who says the app will not let them in. The account
+  /// itself is administered on the web.
+  final bool hasLogin;
+  final String? loginEmail;
+  final bool? loginActive;
+
+  factory HrEmployeeRecord.fromJson(Map<String, dynamic> j) {
+    final employee = (j['employee'] as Map<String, dynamic>?) ?? const {};
+    final emergency =
+        (employee['emergency_contact'] as Map<String, dynamic>?) ?? const {};
+
+    return HrEmployeeRecord(
+      summary: HrEmployeeSummary.fromJson(employee),
+      dateOfBirth: _str(employee['date_of_birth']),
+      gender: _str(employee['gender']),
+      hireDate: _str(employee['hire_date']),
+      workMode: _str(employee['work_mode']),
+      personalEmail: _str(employee['personal_email']),
+      address: _str(employee['address']),
+      city: _str(employee['city']),
+      country: _str(employee['country']),
+      nationalId: _str(employee['national_id']),
+      bloodGroup: _str(employee['blood_group']),
+      emergencyName: _str(emergency['name']),
+      emergencyPhone: _str(emergency['phone']),
+      emergencyRelation: _str(emergency['relation']),
+      manager: _str(employee['manager']),
+      shift: _str(employee['shift']),
+      hasLogin: employee['has_login'] == true,
+      loginEmail: _str(employee['login_email']),
+      loginActive: employee['login_active'] is bool
+          ? employee['login_active'] as bool
+          : null,
+      balances: ((j['balances'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(HrBalance.fromJson)
+          .toList(),
+      attendance: j['attendance'] is Map<String, dynamic>
+          ? HrAttendanceSummary.fromJson(j['attendance'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+/// One line of an employee's leave history, as HR reads it.
+class HrEmployeeLeave {
+  const HrEmployeeLeave({
+    required this.id,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.days,
+    required this.status,
+    this.decidedBy,
+    this.decisionNote,
+  });
+
+  final int id;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final double days;
+  final String status;
+  final String? decidedBy;
+  final String? decisionNote;
+
+  factory HrEmployeeLeave.fromJson(Map<String, dynamic> j) => HrEmployeeLeave(
+        id: _toInt(j['id']),
+        leaveType: '${j['leave_type'] ?? ''}',
+        startDate: '${j['start_date'] ?? ''}',
+        endDate: '${j['end_date'] ?? ''}',
+        days: _toDouble(j['days']),
+        status: '${j['status'] ?? ''}',
+        decidedBy: _str(j['decided_by']),
+        decisionNote: _str(j['decision_note']),
       );
 }
