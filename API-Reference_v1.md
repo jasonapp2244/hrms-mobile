@@ -3,8 +3,11 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **8da7bdb** (2026-09-22). If the API behaves differently from
+> Taken from `hr-backend` @ **46a8af9** (2026-09-22). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
+>
+> The content is byte-identical to the backend's copy below this stamp; re-check with
+> `diff <(tail -n +12 API-Reference_v1.md) ../hr-backend/API-Reference_v1.md`.
 
 # KEMP — Mobile API Reference (v1)
 
