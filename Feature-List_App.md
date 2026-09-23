@@ -189,5 +189,38 @@ app asks for a sign-in instead of going on trusting what it last knew.*
 *And the handset can be held behind its own fingerprint or face check (B1.3),
 off by default, cleared with the token, and never the only way in.*
 
----
 
+## Device pass — 2026-09-24, Samsung Galaxy A07 (Android 16)
+
+Every role driven by hand on a real handset against a local backend seeded with
+the demo company: employee, manager, HR and admin. What was found, and fixed:
+
+- **The punch buttons stayed grey after every punch** until somebody pulled to
+  refresh. `can_check: false` says the 60-second cooldown is running but not
+  when it ends, and nothing asked again. The clock screen now re-asks every ten
+  seconds while it runs (`test/punch_cooldown_test.dart`).
+- **HR could not open the record of anybody without an emergency contact.** The
+  server sent `[]` — PHP's empty array — and the parser threw on it, leaving a
+  spinner. Fixed on both sides: the server sends `{}`, and the app treats
+  anything that is not a map as "none", so it also survives a server that has
+  not been redeployed.
+- **The HR screens printed wire values**: `2026-10-19 → 2026-10-20 · 2 d`,
+  `2026-06-23`, `office`, `female`. They now use the shared formatters every
+  other screen uses, and read in Spanish too.
+- **A day with several breaks showed the envelope as if it were one break.** HR's
+  day rows now read `3 breaks · 1h` when `break_count` is above one, and the
+  times only for a single break.
+- **Two places still read the handset's clock** (trap 30), found because the
+  test phone sat in a different zone from the demo company. The clock screen's
+  offline copy was judged "still today" against the phone's date — it now uses
+  the company offset in the copy's own `server_time`. And the correction form
+  opened at the phone's hour on the company's day, which ahead of the company
+  is a time that has not happened; `/attendance/regularisations` now sends
+  `server_time` and the form opens on it, falling back to the old guess against
+  a server that does not.
+
+Not bugs, for whoever tests next: the three faint icons over the tab bar on a
+Samsung are its swipe-gesture hints, not buttons; and push stays silent here
+because no Firebase project is configured, as above.
+
+---
