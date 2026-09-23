@@ -60,6 +60,7 @@ void main() {
     String? lastOut,
     String? breakStart,
     String? breakEnd,
+    int? breakCount,
     int? breakMinutes,
     int workedMinutes = 0,
     int punches = 0,
@@ -74,6 +75,7 @@ void main() {
         'last_out': lastOut,
         'break_start': breakStart,
         'break_end': breakEnd,
+        if (breakCount != null) 'break_count': breakCount,
         'break_minutes': breakMinutes,
         'worked_minutes': workedMinutes,
         'punches': punches,
@@ -257,6 +259,60 @@ void main() {
     );
 
     expect(find.textContaining('not ended'), findsOneWidget);
+  });
+
+  testWidgets('several breaks show the count, not the envelope', (tester) async {
+    // Three breaks, the last never ended. The two times are the first start
+    // and the last end — 11:00 and 13:45 — which span 2h45m while only an
+    // hour of it was break. Drawn as "Break 11:00 – 13:45 · 1h" that reads as
+    // broken arithmetic, and the open third break does not appear at all.
+    await pump(
+      tester,
+      hrSession(
+        reply: _window([
+          day(
+            date: '2025-04-03',
+            weekday: 'Thu',
+            firstIn: '2025-04-03T09:00:00-04:00',
+            lastOut: '2025-04-03T17:00:00-04:00',
+            breakStart: '2025-04-03T11:00:00-04:00',
+            breakEnd: '2025-04-03T13:45:00-04:00',
+            breakCount: 3,
+            breakMinutes: 60,
+            workedMinutes: 420,
+            punches: 7,
+          ),
+        ]),
+      ),
+    );
+
+    expect(find.textContaining('3 breaks · 1h'), findsOneWidget);
+    expect(find.textContaining('11:00 – 13:45'), findsNothing);
+  });
+
+  testWidgets('a single break still shows its times', (tester) async {
+    await pump(
+      tester,
+      hrSession(
+        reply: _window([
+          day(
+            date: '2025-04-03',
+            weekday: 'Thu',
+            firstIn: '2025-04-03T09:00:00-04:00',
+            lastOut: '2025-04-03T18:00:00-04:00',
+            breakStart: '2025-04-03T13:00:00-04:00',
+            breakEnd: '2025-04-03T14:00:00-04:00',
+            breakCount: 1,
+            breakMinutes: 60,
+            workedMinutes: 480,
+            punches: 4,
+          ),
+        ]),
+      ),
+    );
+
+    expect(find.textContaining('Break 13:00 – 14:00'), findsOneWidget);
+    expect(find.textContaining('breaks ·'), findsNothing);
   });
 
   testWidgets('an early check-out is flagged', (tester) async {

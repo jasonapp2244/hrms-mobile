@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:attendance/core/api_client.dart';
 import 'package:attendance/core/locale.dart';
-import 'package:attendance/core/models.dart' show AppUser;
+import 'package:attendance/core/models.dart' show AppUser, HrEmployeeRecord;
 import 'package:attendance/core/offline_cache.dart';
 import 'package:attendance/core/session.dart';
 import 'package:attendance/core/theme.dart';
@@ -124,6 +124,51 @@ void main() {
       });
 
       expect(lonely.leadsATeam, isFalse);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The record
+  // -------------------------------------------------------------------------
+
+  group('an employee record', () {
+    Map<String, dynamic> record(Object? contact) => {
+          'ok': true,
+          'employee': {
+            'id': 2,
+            'name': 'Emily Johnson',
+            'employee_code': 'EMP-0002',
+            'status': 'active',
+            'emergency_contact': contact,
+          },
+          'balances': const [],
+        };
+
+    // Found on a handset: the server sent `[]` — PHP's empty array — for
+    // everybody with no contact on file, the cast threw, and HR sat on a
+    // spinner for most of the staff. A server from before the fix still does.
+    test('no contact sent as a list reads as no contact', () {
+      final parsed = HrEmployeeRecord.fromJson(record(const <Object>[]));
+
+      expect(parsed.emergencyName, isNull);
+      expect(parsed.emergencyPhone, isNull);
+      expect(parsed.summary.name, 'Emily Johnson');
+    });
+
+    test('no contact sent as an empty object reads as no contact', () {
+      final parsed = HrEmployeeRecord.fromJson(record(const <String, dynamic>{}));
+
+      expect(parsed.emergencyName, isNull);
+    });
+
+    test('a contact on file is read', () {
+      final parsed = HrEmployeeRecord.fromJson(
+        record({'name': 'Joan Lee', 'phone': '+44 7700 900002', 'relation': 'Mother'}),
+      );
+
+      expect(parsed.emergencyName, 'Joan Lee');
+      expect(parsed.emergencyPhone, '+44 7700 900002');
+      expect(parsed.emergencyRelation, 'Mother');
     });
   });
 
@@ -271,6 +316,12 @@ void main() {
       // Seconded, rather than arriving unread.
       expect(find.textContaining('Seconded by Mia Manager'), findsOneWidget);
       expect(find.text('Cover arranged.'), findsOneWidget);
+
+      // The dates read the way the manager's inbox reads them. The card
+      // printed the wire format — "2026-11-02 → 2026-11-03 · 2 d" — the only
+      // screen in the app that did, and untranslatable into Spanish.
+      expect(find.text('Annual Leave · 2 Nov – 3 Nov · 2 days'), findsOneWidget);
+      expect(find.textContaining('2026-11-02'), findsNothing);
     });
 
     testWidgets('a request that would overspend says so before the tap',

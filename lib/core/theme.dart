@@ -295,6 +295,24 @@ class Fmt {
     return t.dateLong('${d.day}', monthLong(t, d.month), '${d.year}');
   }
 
+  /// `office` / `wfh` / `hybrid` as a person would say it. Shared by the
+  /// Profile tab and HR's record, which both used to decide this for
+  /// themselves — HR's did not, and printed the wire value.
+  static String workMode(AppLocalizations t, String? mode) => switch (mode) {
+        'office' => t.workModeOffice,
+        'wfh' => t.workModeWfh,
+        'hybrid' => t.workModeHybrid,
+        _ => mode ?? '—',
+      };
+
+  /// The three values the server accepts; anything else is shown as sent.
+  static String? gender(AppLocalizations t, String? value) => switch (value) {
+        'male' => t.genderMale,
+        'female' => t.genderFemale,
+        'other' => t.genderOther,
+        _ => value,
+      };
+
   /// 1–12 → "Jan". A switch rather than a list because the generated getters
   /// are twelve separate members, so there is nothing to index into.
   static String monthShort(AppLocalizations t, int month) => switch (month) {

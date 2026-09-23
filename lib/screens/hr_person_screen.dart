@@ -101,8 +101,18 @@ class _HrPersonScreenState extends State<HrPersonScreen> {
                   _Section(
                     title: t.hrPersonEmployment,
                     rows: [
-                      (t.hrPersonHireDate, record.hireDate),
-                      (t.hrPersonWorkMode, record.workMode),
+                      (
+                        t.hrPersonHireDate,
+                        record.hireDate == null
+                            ? null
+                            : Fmt.longDate(t, record.hireDate!),
+                      ),
+                      (
+                        t.hrPersonWorkMode,
+                        record.workMode == null
+                            ? null
+                            : Fmt.workMode(t, record.workMode),
+                      ),
                       (t.hrPersonManager, record.manager),
                       (t.hrPersonShift, record.shift),
                     ],
@@ -111,8 +121,13 @@ class _HrPersonScreenState extends State<HrPersonScreen> {
                   _Section(
                     title: t.hrPersonPersonal,
                     rows: [
-                      (t.hrPersonDateOfBirth, record.dateOfBirth),
-                      (t.hrPersonGender, record.gender),
+                      (
+                        t.hrPersonDateOfBirth,
+                        record.dateOfBirth == null
+                            ? null
+                            : Fmt.longDate(t, record.dateOfBirth!),
+                      ),
+                      (t.hrPersonGender, Fmt.gender(t, record.gender)),
                       (t.hrPersonNationalId, record.nationalId),
                       (t.hrPersonBloodGroup, record.bloodGroup),
                       (t.hrPersonPersonalEmail, record.personalEmail),
@@ -467,8 +482,8 @@ class _LeaveHistory extends StatelessWidget {
                   ),
                   title: Text(request.leaveType),
                   subtitle: Text(
-                    '${request.startDate} → ${request.endDate} · '
-                    '${_n(request.days)}',
+                    '${Fmt.range(t, request.startDate, request.endDate)} · '
+                    '${Fmt.days(t, request.days)}',
                   ),
                 ),
           ],

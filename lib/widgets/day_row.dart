@@ -13,7 +13,7 @@ import '../core/theme.dart';
 ///
 /// **The extra fields are drawn only when the server sent them.**
 /// `/attendance/history` reports nine fields per day and
-/// `/hr/employees/{id}/attendance` reports fifteen, so the break line and the
+/// `/hr/employees/{id}/attendance` reports sixteen, so the break line and the
 /// early-leave flag simply do not appear on the employee's own screen. That is
 /// not a degraded rendering, it is the same rendering with nothing extra to
 /// say — see [HistoryDay].
@@ -144,6 +144,14 @@ class DayRow extends StatelessWidget {
   /// does and there was not one — a day with no break has nothing to say about
   /// breaks, and a line reading "0m" is noise on every ordinary day.
   String? _breakLine(AppLocalizations t) {
+    // Several breaks. The two times are the first start and the last end — an
+    // envelope, not a break — so 11:00 – 13:45 beside "1h" would read as
+    // broken arithmetic. The count and the total are the two true numbers.
+    final count = day.breakCount;
+    if (count != null && count > 1) {
+      return t.historyBreakCount(count, Fmt.duration(t, day.breakMinutes ?? 0));
+    }
+
     final start = day.breakStart;
     if (start == null) return null;
 

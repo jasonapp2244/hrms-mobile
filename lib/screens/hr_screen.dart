@@ -421,8 +421,8 @@ class _PendingCard extends StatelessWidget {
               ),
             const SizedBox(height: 8),
             Text(
-              '${item.leaveType} · ${item.startDate} → ${item.endDate} · '
-              '${_days(item.days)}',
+              '${item.leaveType} · ${Fmt.range(t, item.startDate, item.endDate)} · '
+              '${Fmt.days(t, item.days)}',
               style: theme.textTheme.bodyMedium,
             ),
             if (item.reason != null) ...[
@@ -545,7 +545,7 @@ class _DecidedRow extends StatelessWidget {
       ),
       title: Text('${item.employee} · ${item.leaveType}'),
       subtitle: Text(
-        '${item.startDate} → ${item.endDate}'
+        '${Fmt.range(t, item.startDate, item.endDate)}'
         '${item.decidedBy != null ? ' · ${t.hrDecidedBy(item.decidedBy!)}' : ''}',
       ),
     );
@@ -830,8 +830,6 @@ String _statusLabel(dynamic t, String status) => switch (status) {
       _ => t.hrPeopleStatusInactive as String,
     };
 
-/// "2 days", with the trailing zero dropped on a whole number.
-String _days(double value) => '${_number(value)} d';
 
 String _number(double value) =>
     value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(1);

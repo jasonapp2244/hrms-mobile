@@ -406,6 +406,14 @@
             "start": { "type": "String", "example": "13:00" }
         }
     },
+    "historyBreakCount": "{count} breaks · {total}",
+    "@historyBreakCount": {
+        "description": "Second line under a day with more than one break. Shown instead of the break times, because on such a day the first start and last end span all the breaks and the gaps between them, so the times would not match the total. The total covers every break that was ended.",
+        "placeholders": {
+            "count": { "type": "int", "example": "3" },
+            "total": { "type": "String", "example": "1h" }
+        }
+    },
     "historyPunchCount": " · {count} punches",
     "@historyPunchCount": {
         "description": "Appended only on a day with more than one in-and-out. The times beside it are the FIRST entry and the LAST exit, so the total does not span them; this is what tells the reader why. Keep the separator.",
@@ -1123,6 +1131,9 @@
     "workModeOffice": "Office",
     "workModeWfh": "Working from home",
     "workModeHybrid": "Hybrid",
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "genderOther": "Other",
     "profileMyDocuments": "My documents",
     "profileColleagues": "Colleagues",
     "profileEditContact": "Edit contact details",

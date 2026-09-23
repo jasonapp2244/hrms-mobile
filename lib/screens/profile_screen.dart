@@ -118,7 +118,7 @@ class ProfileScreen extends StatelessWidget {
               (t.profileDepartment, user.employee!.department ?? '—'),
               (t.profileJobTitle, user.employee!.designation ?? '—'),
               (t.profileOffice, user.employee!.office ?? '—'),
-              (t.profileWorkMode, _workMode(t, user.employee!.workMode)),
+              (t.profileWorkMode, Fmt.workMode(t, user.employee!.workMode)),
             ]),
             const SizedBox(height: 16),
           ],
@@ -209,12 +209,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  static String _workMode(AppLocalizations t, String? mode) => switch (mode) {
-        'office' => t.workModeOffice,
-        'wfh' => t.workModeWfh,
-        'hybrid' => t.workModeHybrid,
-        _ => mode ?? '—',
-      };
 
   Future<void> _signOut(BuildContext context, {required bool everywhere}) async {
     // Read before the first await: the palette cannot change mid-call, and

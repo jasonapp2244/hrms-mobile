@@ -773,9 +773,9 @@ class Geofence {
 /// Two endpoints answer in this shape and they do not send the same columns.
 /// `/attendance/history` — the signed-in employee's own — sends the first nine
 /// fields. `/hr/employees/{id}/attendance` sends those **and** the break times,
-/// the break total, the early-leave flag, the shift and any remark.
+/// the break count and total, the early-leave flag, the shift and any remark.
 ///
-/// So the extra six are nullable, and that is the whole compatibility story:
+/// So the extra seven are nullable, and that is the whole compatibility story:
 /// the employee's own History screen passes nulls and draws exactly what it
 /// always drew, and an older server that has never heard of the HR endpoint
 /// degrades the same way rather than crashing on a missing key.
@@ -793,6 +793,7 @@ class HistoryDay {
     this.earlyLeave = false,
     this.breakStart,
     this.breakEnd,
+    this.breakCount,
     this.breakMinutes,
     this.shift,
     this.remarks,
@@ -819,11 +820,21 @@ class HistoryDay {
 
   /// The day's **first** break start and **last** break end.
   ///
-  /// A day with three breaks shows the outer two and [breakMinutes] covers all
-  /// of them — the middle ones are on the punch list, which is where somebody
-  /// checking a correction is already looking.
+  /// On a day with one break they are that break. On a day with several they
+  /// are the envelope round all of them, and [breakMinutes] covers only the
+  /// time inside the breaks — so 11:00 to 13:45 beside a total of an hour is
+  /// correct and reads as wrong. [breakCount] is what tells the two apart.
   final String? breakStart;
   final String? breakEnd;
+
+  /// How many breaks were **started** that day, or null when the server did
+  /// not say.
+  ///
+  /// Null is an older server, and the row draws the two times as it always
+  /// did. Above one the times are an envelope and are not drawn as if they
+  /// were a break. A break started and never ended is counted here but adds
+  /// nothing to [breakMinutes], because its length is unknown.
+  final int? breakCount;
 
   /// Minutes actually punched as breaks, or null when the server did not say.
   ///
@@ -847,6 +858,7 @@ class HistoryDay {
         earlyLeave: j['early_leave'] == true,
         breakStart: _str(j['break_start']),
         breakEnd: _str(j['break_end']),
+        breakCount: j['break_count'] == null ? null : _toInt(j['break_count']),
         breakMinutes: j['break_minutes'] == null ? null : _toInt(j['break_minutes']),
         shift: _str(j['shift']),
         remarks: _str(j['remarks']),
@@ -1841,8 +1853,12 @@ class HrEmployeeRecord {
 
   factory HrEmployeeRecord.fromJson(Map<String, dynamic> j) {
     final employee = (j['employee'] as Map<String, dynamic>?) ?? const {};
+    // Not a cast. A server before the fix sends `[]` for somebody with no
+    // contact on file — PHP's empty array — and the cast threw, leaving HR on
+    // a spinner for most of the staff. Anything that is not a map is "none".
+    final contact = employee['emergency_contact'];
     final emergency =
-        (employee['emergency_contact'] as Map<String, dynamic>?) ?? const {};
+        contact is Map<String, dynamic> ? contact : const <String, dynamic>{};
 
     return HrEmployeeRecord(
       summary: HrEmployeeSummary.fromJson(employee),
