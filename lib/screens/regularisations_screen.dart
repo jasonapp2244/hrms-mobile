@@ -35,6 +35,11 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
   /// date picker must not offer past — see [_RaiseSheetState._pickWhen].
   DateTime? _today;
 
+  /// The company's wall clock when the list was fetched, or null from a server
+  /// that does not send `server_time`. Where the form opens — see
+  /// [_RaiseSheetState._defaultWhen].
+  DateTime? _companyNow;
+
   bool _loading = true;
   String? _error;
 
@@ -72,6 +77,7 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
             .where((p) => p.isCorrectable)
             .toList();
         _today = DateTime.tryParse('${res['today']}') ?? _today;
+        _companyNow = wallClockOf(res['server_time']) ?? _companyNow;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -95,7 +101,11 @@ class _RegularisationsScreenState extends State<RegularisationsScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _RaiseSheet(punches: _punches, today: _today),
+      builder: (_) => _RaiseSheet(
+        punches: _punches,
+        today: _today,
+        companyNow: _companyNow,
+      ),
     );
 
     if (created == true) _load();
@@ -321,13 +331,16 @@ class _RequestCard extends StatelessWidget {
 /// whether `attendance_log_id` is present, so the form does not have to send a
 /// mode as well — one less thing that can disagree with itself.
 class _RaiseSheet extends StatefulWidget {
-  const _RaiseSheet({required this.punches, this.today});
+  const _RaiseSheet({required this.punches, this.today, this.companyNow});
 
   final List<DisputablePunch> punches;
 
   /// The day the server says the company is on, or null if no reply has
   /// carried one. See [_RaiseSheetState._pickWhen].
   final DateTime? today;
+
+  /// The company's wall clock, or null from an older server.
+  final DateTime? companyNow;
 
   @override
   State<_RaiseSheet> createState() => _RaiseSheetState();
@@ -354,12 +367,17 @@ class _RaiseSheetState extends State<_RaiseSheet> {
     super.dispose();
   }
 
-  /// The company's today at the handset's wall clock.
+  /// The company's now, when the server said what that is.
   ///
-  /// The date has to be the company's, because that is what the server judges.
-  /// The *time* is only a starting point the user is about to change, and the
-  /// phone's clock is as good a guess as any for it.
+  /// Failing that, the company's today at the handset's wall clock — which is
+  /// what this always was, and why it changed: the time is a starting point
+  /// the user is about to change, but on a phone a few hours ahead of the
+  /// company it started on a time that had not happened yet there, and the
+  /// server refused the very value the form had suggested.
   DateTime _defaultWhen() {
+    final companyNow = widget.companyNow;
+    if (companyNow != null) return companyNow;
+
     final now = DateTime.now();
     final today = widget.today;
 
@@ -586,4 +604,20 @@ class _RaiseSheetState extends State<_RaiseSheet> {
       ),
     );
   }
+}
+
+/// `2026-09-14T22:30:00-04:00` → 22:30 on 14 Sep, as a plain wall-clock
+/// reading with the offset dropped.
+///
+/// Not `DateTime.parse`: that converts to the handset's zone, which is the
+/// reading this exists to avoid. Null for anything that is not a timestamp.
+@visibleForTesting
+DateTime? wallClockOf(Object? iso) {
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})')
+      .firstMatch('${iso ?? ''}');
+  if (m == null) return null;
+
+  int part(int i) => int.parse(m.group(i)!);
+
+  return DateTime(part(1), part(2), part(3), part(4), part(5));
 }
