@@ -44,6 +44,16 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   Timer? _ticker;
   DateTime? _loadedAt;
 
+  /// Asks again while the server holds the punch cooldown.
+  ///
+  /// The reply says only *that* the cooldown is running (`can_check: false`),
+  /// not when it ends, and nothing else would ask — so the buttons stayed grey
+  /// under "still registering" until somebody pulled to refresh, long after
+  /// the server would have taken the punch. Somebody going on a break reads
+  /// that as a frozen app.
+  Timer? _cooldownRetry;
+  static const _cooldownRetryAfter = Duration(seconds: 10);
+
   /// When the card on screen was saved, or null when the server answered just
   /// now. Also what stops the worked-hours figure ticking: see [_load].
   DateTime? _cachedAt;
@@ -97,6 +107,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   void dispose() {
     _session?.actions.pending.removeListener(_consumePendingAction);
     _ticker?.cancel();
+    _cooldownRetry?.cancel();
     super.dispose();
   }
 
@@ -203,6 +214,16 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         _cachedAt = res.cachedAt;
         _loading = false;
       });
+
+      // Only for a live answer. A saved copy's `can_check` is as old as the
+      // copy, and polling a server that did not answer is the offline banner's
+      // job, not this timer's.
+      _cooldownRetry?.cancel();
+      if (res.cachedAt == null && !_today!.canCheck) {
+        _cooldownRetry = Timer(_cooldownRetryAfter, () {
+          if (mounted) _load(silent: true);
+        });
+      }
 
       // Reaching the server is the only proof there is a connection, and a
       // fresh answer is that proof — a cached one is the opposite. Drain
