@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31) draws the splash itself and ignores
+         @drawable/launch_background, so the three windowSplashScreen* items
+         below are the only launch screen this OS version ever shows. Generated
+         by `dart run flutter_native_splash:create` from the block in
+         pubspec.yaml — change it there, not here.
+
+         BOTH PARENTS MUST STAY Theme.AppCompat DESCENDANTS, exactly as in
+         values/styles.xml and for exactly the same reason: the biometric
+         prompt local_auth shows (B1.3) comes from androidx.biometric, which
+         inflates against an AppCompat theme. NormalTheme is the theme the
+         activity actually runs under, and on every phone new enough to matter
+         that is this file rather than values/styles.xml.
+
+         WARNING: flutter_native_splash CREATES THIS FILE WITH
+         @android:style/Theme.Light.NoTitleBar (Theme.Black.NoTitleBar in
+         values-night-v31) - platform themes, not AppCompat ones. A re-run
+         edits the items of a file that already exists and leaves the parents
+         alone, so this edit survives day to day. It does NOT survive the file
+         being deleted and regenerated, which is what a fresh checkout does if
+         it runs the generator before these files are committed. If this ever
+         comes back with a platform parent, that is why. -->
+    <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is on -->
+    <style name="LaunchTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSplashScreenBackground">#052C6E</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
+    </style>
+    <!-- Theme applied to the Android Window as soon as the process has started.
+         This theme determines the color of the Android Window while your
+         Flutter UI initializes, as well as behind your Flutter UI while its
+         running.
+
+         This Theme is only used starting with V2 of Flutter's Android embedding. -->
+    <style name="NormalTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

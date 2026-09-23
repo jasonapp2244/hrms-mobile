@@ -72,6 +72,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
 
 # Generates every launcher icon both stores ask for from one source image.
 # Re-run after changing anything here:
@@ -99,6 +100,62 @@ flutter_launcher_icons:
   # after review rather than at upload. The source is opaque already; this makes
   # it impossible to regress by editing the source.
   remove_alpha_ios: true
+
+# The launch screen, on both stores. Re-run after changing anything here:
+#
+#   dart run flutter_native_splash:create
+#
+# Like the icons above, the generated files are committed and this is not part
+# of the build.
+#
+# WHY NAVY AND NOT THE APP'S OWN BACKGROUND
+#
+# The usual advice is to make the launch screen match the first screen the app
+# draws, so there is no flash. That cannot be done here: `app_icon_foreground`
+# is the mark with the navy KEYED OUT, so what is left is white on transparent.
+# On the app's light grey it would be an invisible logo on an empty screen.
+# The navy is the same #052C6E as `adaptive_icon_background` above, which buys
+# something better than no flash — on Android 12+ the launcher animates the app
+# icon itself into the splash, and because the two backgrounds are the same
+# colour the icon appears to grow out of the home screen without a seam.
+flutter_native_splash:
+  color: "#052C6E"
+  image: assets/icon/app_icon_foreground.png
+
+  # Navy reads correctly on both, so dark mode is not a different design. Set
+  # explicitly rather than left to default, because the default for an unset
+  # dark colour is white, and a white dark-mode splash with a white logo on it
+  # is a blank screen that only appears on half the phones in the room.
+  color_dark: "#052C6E"
+  image_dark: assets/icon/app_icon_foreground.png
+
+  # Android 12 replaced the window-background splash with a system-drawn one
+  # and ignores the block above, so this is the only launch screen anything
+  # from Android 12 on will show. Without this section the OS falls back to the
+  # launcher icon on the theme background.
+  #
+  # A DIFFERENT SOURCE IMAGE, AND IT HAS TO BE. The system masks this icon to a
+  # circle two thirds the width of the canvas and throws the rest away. The
+  # mark in `app_icon_foreground` fills 94% of its canvas — it is drawn to be
+  # inset 16% by the adaptive-icon XML, which no splash applies — so used here
+  # it loses both ends of the wordmark. `app_icon_android12.png` is the same
+  # artwork re-centred on a 1152px canvas at the size that just fits the mask:
+  # 629x441, a 768px diagonal, exactly two thirds. Regenerate it, not by hand,
+  # if the mark ever changes.
+  #
+  # No `icon_background_color` on purpose. It would draw a navy circle on the
+  # navy `color` above — invisible — and halve the space the mark is allowed.
+  android_12:
+    color: "#052C6E"
+    color_dark: "#052C6E"
+    image: assets/icon/app_icon_android12.png
+    image_dark: assets/icon/app_icon_android12.png
+
+  android: true
+  ios: true
+  # No web target in this project; generating for it would add files nothing
+  # serves.
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

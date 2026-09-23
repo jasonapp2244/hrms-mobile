@@ -78,5 +78,11 @@
 	<!-- No ATS exception is declared on purpose. The default blocks plain HTTP,
 	     which is what we want for a release build; the http://10.0.2.2 used in
 	     development is reached by dart:io, which does not consult ATS at all. -->
+	<!-- Added by flutter_native_splash, and kept so a re-run does not keep
+	     re-adding it. False is the platform default: the status bar stays
+	     visible over the launch screen, which is what the navy field is drawn
+	     to sit behind. -->
+	<key>UIStatusBarHidden</key>
+	<false/>
 </dict>
 </plist>
