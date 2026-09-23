@@ -75,6 +75,47 @@ void main() {
       expect(user.leadsATeam, isTrue);
       expect(user.hasEmployeeRecord, isTrue);
       expect(user.initials, 'JS');
+      expect(user.displayName, 'James Smith');
+    });
+
+    test('the avatar and the heading cannot disagree about the name', () {
+      // The account is named for a function and the person behind it is not.
+      // Seen on a handset: a circle reading "HM" — from the login "HR Manager"
+      // — next to the heading "Hana Ruiz", because the avatar and the text
+      // beside it read different fields. Both go through displayName now.
+      final user = AppUser.fromJson({
+        'id': 8,
+        'name': 'HR Manager',
+        'email': 'hr@hrms.test',
+        'roles': ['hr'],
+        'permissions': ['view-attendance'],
+        'employee': {
+          'id': 8,
+          'employee_code': 'EMP-0006',
+          'full_name': 'Hana Ruiz',
+          'is_manager': false,
+        },
+      });
+
+      expect(user.displayName, 'Hana Ruiz');
+      expect(user.initials, 'HR');
+    });
+
+    test('an account with no employee record keeps its own name', () {
+      // Admin is an operator of the system rather than a member of staff and
+      // deliberately has no employee record. The account name is the only name
+      // it has, so displayName must not fall through to something empty.
+      final user = AppUser.fromJson({
+        'id': 1,
+        'name': 'System Administrator',
+        'email': 'admin@hrms.test',
+        'roles': ['admin'],
+        'permissions': ['view-dashboard'],
+      });
+
+      expect(user.hasEmployeeRecord, isFalse);
+      expect(user.displayName, 'System Administrator');
+      expect(user.initials, 'SA');
     });
 
     test('HR holds approve-leave and still gets no Team tab', () {

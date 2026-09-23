@@ -6,6 +6,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import 'hr_attendance_screen.dart';
 
 /// One employee record, as only `manage-employees` may read it.
 ///
@@ -140,7 +141,10 @@ class _HrPersonScreenState extends State<HrPersonScreen> {
                   _SignInCard(record: record),
 
                   if (record.attendance != null)
-                    _AttendanceCard(summary: record.attendance!),
+                    _AttendanceCard(
+                      summary: record.attendance!,
+                      person: widget.person,
+                    ),
 
                   if (record.balances.isNotEmpty)
                     _BalancesCard(balances: record.balances),
@@ -296,9 +300,13 @@ class _SignInCard extends StatelessWidget {
 }
 
 class _AttendanceCard extends StatelessWidget {
-  const _AttendanceCard({required this.summary});
+  const _AttendanceCard({required this.summary, required this.person});
 
   final HrAttendanceSummary summary;
+
+  /// Passed through to the day-by-day screen so it opens on a name rather than
+  /// a spinner, the same reason this screen takes one.
+  final HrEmployeeSummary person;
 
   @override
   Widget build(BuildContext context) {
@@ -321,6 +329,22 @@ class _AttendanceCard extends StatelessWidget {
                 _Stat(label: t.hrPersonLate, value: summary.late),
                 _Stat(label: t.hrPersonEarlyLeave, value: summary.earlyLeave),
               ],
+            ),
+            const SizedBox(height: 4),
+            // The counts above are the shape; this is the detail behind them.
+            // Four numbers cannot answer "what happened on the 14th", which is
+            // the question somebody holding a phone is usually being asked.
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => HrAttendanceScreen(person: person),
+                  ),
+                ),
+                icon: const Icon(Icons.event_note_outlined, size: 18),
+                label: Text(t.hrPersonFullHistory),
+              ),
             ),
           ],
         ),

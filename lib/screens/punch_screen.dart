@@ -508,7 +508,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          user?.employee?.fullName ?? user?.name ?? context.t.clockToday,
+          user?.displayName ?? context.t.clockToday,
         ),
         actions: [
           // The way into the notification history (B5.6). On this tab because

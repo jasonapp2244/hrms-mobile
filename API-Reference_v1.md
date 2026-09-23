@@ -3,7 +3,7 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **46a8af9** (2026-09-22). If the API behaves differently from
+> Taken from `hr-backend` @ **2e8c552** (2026-09-23). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
 >
 > The content is byte-identical to the backend's copy below this stamp; re-check with
@@ -1629,10 +1629,16 @@ behind `manage-employees`.
 
 Query: `q` (name, staff number or email), `department_id`, `office_id`,
 `status` (`active` default, or `inactive`, `terminated`, `all`), `page`,
-`per_page` (default 20).
+`per_page` (default 20), plus the window below.
 
 Leavers are **included on request**, unlike the directory: most of what HR is
 asked about somebody after they go is about somebody who has gone.
+
+Each row carries `attendance` for the window — present and late **days**, not
+punches. It is computed for the page you asked for and no further, so paging is
+what it costs. `period`, `from`, `to` and `today` work exactly as they do on
+`GET /hr/employees/{id}/attendance` below; read the dates back rather than
+building them.
 
 ```json
 {
@@ -1642,11 +1648,18 @@ asked about somebody after they go is about somebody who has gone.
     "first_name": "Ann", "last_name": "Lee",
     "department": "Ops", "designation": "Technician", "office": "Head Office",
     "status": "active", "photo_url": null,
-    "email": "ann@acme.test", "phone": "+44 7700 900001"
+    "email": "ann@acme.test", "phone": "+44 7700 900001",
+    "attendance": {
+      "present_days": 18, "late_days": 2, "early_leave_days": 0,
+      "worked_minutes": 8640, "break_minutes": 1080
+    }
   }],
+  "period": "daily", "from": "2026-07-14", "to": "2026-08-12", "today": "2026-08-12",
   "meta": { "current_page": 1, "last_page": 1, "per_page": 20, "total": 1 }
 }
 ```
+
+A row whose person has no punches in the window carries zeros, not `null`.
 
 ### `GET /hr/employees/{id}`
 
@@ -1694,6 +1707,58 @@ mistyped are the ones least likely to be noticed wrong.
 That person's leave history, newest first, paginated. Its own call because a
 long-serving employee has a long one, and a record opened to check a phone
 number should not pay for it.
+
+### `GET /hr/employees/{id}/attendance`
+
+That person's attendance, one row per **day**, newest first. The counts on the
+record answer "roughly how is this person doing"; this answers *what happened on
+the 14th*.
+
+**Ask for a `period`, not for dates.** The server resolves the window in the
+company's timezone and tells you what it used. A phone is wherever its owner is,
+so a month worked out on the handset is a different month for part of every day.
+
+| Query | Default | Notes |
+|---|---|---|
+| `period` | `daily` | `daily` (30 days to today), `weekly` (this week to date), `monthly` (this month to date), `custom` |
+| `from` | 29 days before `to` | `YYYY-MM-DD`. Read only when `period=custom`. |
+| `to` | today | Same. Clamped to today — a day that has not happened cannot be an absence. |
+
+Maximum window: **92 days**, the same ceiling as `/attendance/history`.
+
+`today` is the company's date. Anchor a date picker on it rather than on the
+device clock, or the picker offers a day the server then refuses.
+
+```json
+{
+  "ok": true,
+  "employee": { "id": 3, "employee_code": "EMP-0003", "name": "Ann Lee" },
+  "period": "monthly", "from": "2026-08-01", "to": "2026-08-12", "today": "2026-08-12",
+  "days": [
+    { "date": "2026-08-03", "weekday": "Mon", "status": "present",
+      "late": false, "early_leave": false,
+      "first_in": "2026-08-03T09:00:00-04:00", "last_out": "2026-08-03T18:00:00-04:00",
+      "break_start": "2026-08-03T13:00:00-04:00", "break_end": "2026-08-03T14:00:00-04:00",
+      "break_minutes": 60, "worked_minutes": 480, "punches": 4,
+      "holiday": null, "shift": "Morning Shift", "remarks": null }
+  ],
+  "totals": {
+    "present_days": 1, "absent_days": 0, "leave_days": 0,
+    "late_days": 0, "early_leave_days": 0,
+    "worked_minutes": 480, "break_minutes": 60
+  }
+}
+```
+
+`status` is the same six values `GET /attendance/history` uses.
+
+`break_start` and `break_end` are the day's **first** start and **last** end;
+`break_minutes` is what was actually punched, so several breaks in a day sum and
+one left open at check-out counts as nothing — its length is unknown, and
+guessing it long would cut somebody's hours. A day never clocked out reports
+`worked_minutes: 0` rather than a guess.
+
+**Failures:** `invalid_range` (422) · `range_too_large` (422) · `forbidden` (403) · `validation_failed` (422)
 
 An employee on another company's books is `forbidden` on every route above.
 The permission is company-blind; the controller is not.

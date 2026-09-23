@@ -202,8 +202,22 @@ class AppUser {
 
   bool get hasEmployeeRecord => employee != null;
 
+  /// The name to put on screen for this account.
+  ///
+  /// `name` is the login's name; the employee record is the person. They are
+  /// not the same string. An account opened for a function rather than a human
+  /// — "HR Manager" signed in as Hana Ruiz — differs in exactly the case this
+  /// app is most often demonstrated in. The avatar derived its initials from
+  /// `name` while the heading beside it derived from the employee, so HR drew
+  /// a circle reading "HM" next to the words "Hana Ruiz".
+  ///
+  /// Everything that draws a name for the signed-in user goes through here, so
+  /// the two cannot disagree again. Admin has no employee record and falls
+  /// back to the account name, which is the only name it has.
+  String get displayName => employee?.fullName ?? name;
+
   String get initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = displayName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.characters1();
     return '${parts.first.characters1()}${parts.last.characters1()}';
@@ -754,6 +768,17 @@ class Geofence {
       );
 }
 
+/// One day of attendance, for whoever is being read.
+///
+/// Two endpoints answer in this shape and they do not send the same columns.
+/// `/attendance/history` — the signed-in employee's own — sends the first nine
+/// fields. `/hr/employees/{id}/attendance` sends those **and** the break times,
+/// the break total, the early-leave flag, the shift and any remark.
+///
+/// So the extra six are nullable, and that is the whole compatibility story:
+/// the employee's own History screen passes nulls and draws exactly what it
+/// always drew, and an older server that has never heard of the HR endpoint
+/// degrades the same way rather than crashing on a missing key.
 class HistoryDay {
   HistoryDay({
     required this.date,
@@ -765,6 +790,12 @@ class HistoryDay {
     this.firstIn,
     this.lastOut,
     this.holiday,
+    this.earlyLeave = false,
+    this.breakStart,
+    this.breakEnd,
+    this.breakMinutes,
+    this.shift,
+    this.remarks,
   });
 
   final String date;
@@ -779,6 +810,30 @@ class HistoryDay {
   final String? lastOut;
   final String? holiday;
 
+  /// The last check-out of the day was before the shift ended.
+  ///
+  /// Defaults to false rather than being nullable: "we were not told" and "they
+  /// did not leave early" both mean there is no flag to draw, and a tri-state
+  /// would only give every caller a third branch that renders like the second.
+  final bool earlyLeave;
+
+  /// The day's **first** break start and **last** break end.
+  ///
+  /// A day with three breaks shows the outer two and [breakMinutes] covers all
+  /// of them — the middle ones are on the punch list, which is where somebody
+  /// checking a correction is already looking.
+  final String? breakStart;
+  final String? breakEnd;
+
+  /// Minutes actually punched as breaks, or null when the server did not say.
+  ///
+  /// Null is not zero. Zero means a day with no break taken, which is a fact;
+  /// null means this endpoint does not report breaks at all.
+  final int? breakMinutes;
+
+  final String? shift;
+  final String? remarks;
+
   factory HistoryDay.fromJson(Map<String, dynamic> j) => HistoryDay(
         date: '${j['date'] ?? ''}',
         weekday: '${j['weekday'] ?? ''}',
@@ -789,6 +844,12 @@ class HistoryDay {
         firstIn: _str(j['first_in']),
         lastOut: _str(j['last_out']),
         holiday: _str(j['holiday']),
+        earlyLeave: j['early_leave'] == true,
+        breakStart: _str(j['break_start']),
+        breakEnd: _str(j['break_end']),
+        breakMinutes: j['break_minutes'] == null ? null : _toInt(j['break_minutes']),
+        shift: _str(j['shift']),
+        remarks: _str(j['remarks']),
       );
 }
 
@@ -799,6 +860,8 @@ class HistoryTotals {
     required this.leaveDays,
     required this.absentDays,
     required this.workedMinutes,
+    this.earlyLeaveDays = 0,
+    this.breakMinutes,
   });
 
   final int presentDays;
@@ -807,12 +870,89 @@ class HistoryTotals {
   final int absentDays;
   final int workedMinutes;
 
+  /// Only the HR endpoint reports these two — see [HistoryDay].
+  final int earlyLeaveDays;
+  final int? breakMinutes;
+
   factory HistoryTotals.fromJson(Map<String, dynamic> j) => HistoryTotals(
         presentDays: _toInt(j['present_days']),
         lateDays: _toInt(j['late_days']),
         leaveDays: _toInt(j['leave_days']),
         absentDays: _toInt(j['absent_days']),
         workedMinutes: _toInt(j['worked_minutes']),
+        earlyLeaveDays: _toInt(j['early_leave_days']),
+        breakMinutes: j['break_minutes'] == null ? null : _toInt(j['break_minutes']),
+      );
+}
+
+/// One employee's attendance over a window the **server** named.
+///
+/// [from], [to] and [today] are read back out of the reply and never worked out
+/// on the handset. A phone is wherever its owner is and attendance is judged in
+/// the company's zone, so for part of every day the two disagree about the
+/// date — which is why the app sends a [period] word and not a pair of dates.
+///
+/// [today] is the company's date. It is what a date picker must be anchored on:
+/// Material defaults `currentDate` to `DateTime.now()`, and a picker that
+/// offers a day the server would refuse is worse than one that does not open.
+class HrAttendanceHistory {
+  HrAttendanceHistory({
+    required this.period,
+    required this.from,
+    required this.to,
+    required this.today,
+    required this.days,
+    required this.totals,
+  });
+
+  /// daily · weekly · monthly · custom
+  final String period;
+  final String from;
+  final String to;
+  final String today;
+  final List<HistoryDay> days;
+  final HistoryTotals totals;
+
+  factory HrAttendanceHistory.fromJson(Map<String, dynamic> j) => HrAttendanceHistory(
+        period: '${j['period'] ?? 'daily'}',
+        from: '${j['from'] ?? ''}',
+        to: '${j['to'] ?? ''}',
+        today: '${j['today'] ?? ''}',
+        days: ((j['days'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(HistoryDay.fromJson)
+            .toList(),
+        totals: HistoryTotals.fromJson(
+          (j['totals'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+}
+
+/// The attendance line under a name in the HR register.
+///
+/// Days, not punches: three check-ins on one late morning is one late day, and
+/// the rest of the app has always counted it that way.
+class HrRegisterAttendance {
+  const HrRegisterAttendance({
+    required this.presentDays,
+    required this.lateDays,
+    required this.earlyLeaveDays,
+    required this.workedMinutes,
+    required this.breakMinutes,
+  });
+
+  final int presentDays;
+  final int lateDays;
+  final int earlyLeaveDays;
+  final int workedMinutes;
+  final int breakMinutes;
+
+  factory HrRegisterAttendance.fromJson(Map<String, dynamic> j) => HrRegisterAttendance(
+        presentDays: _toInt(j['present_days']),
+        lateDays: _toInt(j['late_days']),
+        earlyLeaveDays: _toInt(j['early_leave_days']),
+        workedMinutes: _toInt(j['worked_minutes']),
+        breakMinutes: _toInt(j['break_minutes']),
       );
 }
 
@@ -1568,6 +1708,7 @@ class HrEmployeeSummary {
     this.photoUrl,
     this.email,
     this.phone,
+    this.attendance,
   });
 
   final int id;
@@ -1585,6 +1726,12 @@ class HrEmployeeSummary {
   final String? email;
   final String? phone;
 
+  /// The attendance line for the window the register was asked for.
+  ///
+  /// Null from a server that predates it, and from anywhere else this summary
+  /// is built — the detail screen takes the same object and has no window.
+  final HrRegisterAttendance? attendance;
+
   bool get isActive => status == 'active';
 
   factory HrEmployeeSummary.fromJson(Map<String, dynamic> j) =>
@@ -1599,6 +1746,9 @@ class HrEmployeeSummary {
         photoUrl: _str(j['photo_url']),
         email: _str(j['email']),
         phone: _str(j['phone']),
+        attendance: j['attendance'] is Map<String, dynamic>
+            ? HrRegisterAttendance.fromJson(j['attendance'] as Map<String, dynamic>)
+            : null,
       );
 }
 

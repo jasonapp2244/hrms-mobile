@@ -9,6 +9,7 @@ import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/day_row.dart';
 import '../widgets/month_bar.dart';
 import 'regularisations_screen.dart';
 
@@ -393,7 +394,7 @@ class _HistoryScreenState extends State<HistoryScreen> with RefreshOnShow {
                     children: [
                       for (var i = 0; i < _days.length; i++) ...[
                         if (i > 0) const Divider(height: 1),
-                        _DayRow(day: _days[i]),
+                        DayRow(day: _days[i]),
                       ],
                     ],
                   ),
@@ -719,102 +720,6 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _DayRow extends StatelessWidget {
-  const _DayRow({required this.day});
-
-  final HistoryDay day;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final theme = Theme.of(context);
-    final t = context.t;
-    final (color, label) = colors.statusStyle(t, day.status);
-
-    return ListTile(
-      leading: SizedBox(
-        width: 46,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              // English on the wire, whoever is reading it.
-              Fmt.weekdayNamed(t, day.weekday),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              Fmt.shortDate(t, day.date),
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (day.late) ...[
-            const SizedBox(width: 6),
-            Text(
-              t.historyLateFlag,
-              style: TextStyle(color: colors.late, fontSize: 11.5),
-            ),
-          ],
-        ],
-      ),
-      subtitle: day.holiday != null
-          ? Text(day.holiday!)
-          : (day.firstIn != null
-                ? Text(
-                    t.historyInAt(_clock(day.firstIn!)) +
-                        (day.lastOut != null
-                            ? t.historyOutAt(_clock(day.lastOut!))
-                            : t.historyStillOpen) +
-                        // More than a single in-and-out. The two times above
-                        // are the FIRST entry and the LAST exit, so the total
-                        // beside them does not span the gap between — a day
-                        // running 15:09 to 16:42 can read 22m and be right.
-                        // Without this the row looks like broken arithmetic,
-                        // and the count is the cheapest thing that explains it.
-                        (day.punches > 2
-                            ? t.historyPunchCount(day.punches)
-                            : ''),
-                  )
-                : null),
-      trailing: day.workedMinutes > 0
-          ? Text(
-              Fmt.duration(t, day.workedMinutes),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            )
-          : null,
-    );
-  }
-
-  /// The server sends a full ISO timestamp carrying the company's offset. Take
-  /// the clock face off it directly rather than converting — converting would
-  /// re-render an employee's office time in whatever zone the handset is in.
-  static String _clock(String iso) {
-    final time = iso.contains('T') ? iso.split('T')[1] : iso;
-    final parts = time.split(':');
-    return parts.length >= 2 ? '${parts[0]}:${parts[1]}' : time;
-  }
-}
-
 /// What one day looks like in the grid: a tone, a shape that carries the same
 /// meaning without it, and the word a screen reader says.
 ///
@@ -1131,7 +1036,7 @@ class _SelectedDayCard extends StatelessWidget {
 
     return Card(
       child: day != null
-          ? _DayRow(day: day)
+          ? DayRow(day: day)
           : ListTile(
               title: Text(Fmt.longDate(t, date)),
               subtitle: Text(

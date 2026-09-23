@@ -573,6 +573,17 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
   bool _includeLeavers = false;
   String? _error;
 
+  /// Which window the attendance line under each name covers.
+  ///
+  /// A word, not a pair of dates — the server resolves it in the company's
+  /// zone and reports what it used. [_from], [_to] and [_today] are read back
+  /// out of the reply and never worked out here; the handset's own date is a
+  /// different date from the employer's for part of every day.
+  String _period = 'daily';
+  String? _from;
+  String? _to;
+  String? _today;
+
   @override
   ValueListenable<bool> get visibility => widget.visible;
 
@@ -604,6 +615,10 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
       // most of the time, and a list that opens on everybody who ever worked
       // here answers the wrong question first.
       if (_includeLeavers) 'status=all',
+      'period=$_period',
+      // Only `custom` carries dates, and only once the picker has run.
+      if (_period == 'custom' && _from != null) 'from=$_from',
+      if (_period == 'custom' && _to != null) 'to=$_to',
     ];
 
     try {
@@ -618,6 +633,11 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
             .whereType<Map<String, dynamic>>()
             .map(HrEmployeeSummary.fromJson)
             .toList();
+        // The dates the server actually used. An older server sends none and
+        // the window line simply does not draw, which is the safe direction.
+        _from = res['from'] as String?;
+        _to = res['to'] as String?;
+        _today = res['today'] as String?;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -629,6 +649,53 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
       });
     }
   }
+
+  /// Switch the window the attendance line covers.
+  ///
+  /// `custom` opens a range picker anchored on the **server's** today.
+  /// `currentDate` is the day Material rings, and it defaults to
+  /// `DateTime.now()`; `lastDate` is a rule rather than decoration, because the
+  /// server clamps a window to its own today and a picker offering tomorrow
+  /// offers a day the app would then be corrected on.
+  Future<void> _chooseWindow(String period) async {
+    if (period != 'custom') {
+      setState(() {
+        _period = period;
+        _from = null;
+        _to = null;
+      });
+
+      return _load();
+    }
+
+    final anchor = DateTime.tryParse(_today ?? '');
+
+    // No reply yet means no company date to anchor on, and the handset's is
+    // the one date that must not be used here.
+    if (anchor == null) return;
+
+    final picked = await showDateRangePicker(
+      context: context,
+      currentDate: anchor,
+      firstDate: anchor.subtract(const Duration(days: 365)),
+      lastDate: anchor,
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _period = 'custom';
+      _from = _ymd(picked.start);
+      _to = _ymd(picked.end);
+    });
+
+    await _load();
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -648,6 +715,24 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
               border: const OutlineInputBorder(),
               isDense: true,
             ),
+          ),
+        ),
+        ListTile(
+          dense: true,
+          title: Text(t.hrPeopleWindow),
+          subtitle: _from == null || _to == null
+              ? null
+              : Text(Fmt.range(t, _from!, _to!)),
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.tune),
+            initialValue: _period,
+            onSelected: _chooseWindow,
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'daily', child: Text(t.hrPeriodDaily)),
+              PopupMenuItem(value: 'weekly', child: Text(t.hrPeriodWeekly)),
+              PopupMenuItem(value: 'monthly', child: Text(t.hrPeriodMonthly)),
+              PopupMenuItem(value: 'custom', child: Text(t.hrPeriodCustom)),
+            ],
           ),
         ),
         SwitchListTile(
@@ -678,14 +763,42 @@ class _PeopleTabState extends State<_PeopleTab> with RefreshOnShow {
                       itemBuilder: (context, index) {
                         final person = _people[index];
 
+                        final attendance = person.attendance;
+
                         return ListTile(
+                          isThreeLine: attendance != null,
                           title: Text(person.name),
-                          subtitle: Text(
-                            [
-                              person.employeeCode,
-                              person.designation,
-                              person.department,
-                            ].whereType<String>().join(' · '),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                [
+                                  person.employeeCode,
+                                  person.designation,
+                                  person.department,
+                                ].whereType<String>().join(' · '),
+                              ),
+                              // Present and late are DAYS. Drawn only when the
+                              // server reported them, so an older one loses the
+                              // line rather than showing zeros it never sent.
+                              if (attendance != null)
+                                Text(
+                                  t.hrPeopleAttendanceLine(
+                                    attendance.presentDays,
+                                    attendance.lateDays,
+                                    Fmt.duration(t, attendance.workedMinutes),
+                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
                           ),
                           trailing: person.isActive
                               ? null

@@ -351,9 +351,21 @@
     "historyStatLeave": "Leave",
     "historyStatAbsent": "Absent",
     "historyStatWorked": "Worked",
+    "historyStatEarly": "Early out",
+    "@historyStatEarly": {
+        "description": "Totals card. Days whose last check-out was before the shift ended. Only HR sees this one."
+    },
+    "historyStatBreak": "Break",
+    "@historyStatBreak": {
+        "description": "Totals card. Time actually punched as breaks over the window."
+    },
     "historyLateFlag": "late",
     "@historyLateFlag": {
         "description": "Small marker beside the status pill on a day somebody arrived late. Lower case on purpose."
+    },
+    "historyEarlyFlag": "left early",
+    "@historyEarlyFlag": {
+        "description": "The companion to historyLateFlag, on a day the last check-out came before the shift ended. Lower case for the same reason."
     },
     "historyInAt": "In {clock}",
     "@historyInAt": {
@@ -377,6 +389,22 @@
     "historyStillOpen": " · still open",
     "@historyStillOpen": {
         "description": "Appended where there is an entry punch and no exit yet. Keep the separator."
+    },
+    "historyBreakLine": "Break {start} – {end} · {total}",
+    "@historyBreakLine": {
+        "description": "Second line under a day, when the server reports breaks. The two times are the day's FIRST break start and LAST break end; the total covers every break taken, so on a day with two breaks the total is longer than the gap between the times shown.",
+        "placeholders": {
+            "start": { "type": "String", "example": "13:00" },
+            "end": { "type": "String", "example": "14:00" },
+            "total": { "type": "String", "example": "1h 0m" }
+        }
+    },
+    "historyBreakOpen": "Break from {start} · not ended",
+    "@historyBreakOpen": {
+        "description": "A break punched in and never punched out. Worth saying rather than hiding: its length is unknown so it costs nothing, and without this the worked total beside it looks wrong.",
+        "placeholders": {
+            "start": { "type": "String", "example": "13:00" }
+        }
     },
     "historyPunchCount": " · {count} punches",
     "@historyPunchCount": {
@@ -1278,6 +1306,47 @@
     "hrPeopleEmptyTitle": "Nobody found",
     "hrPeopleEmptyBody": "Try a different name, or include people who have left.",
     "hrPeopleIncludeLeavers": "Include people who have left",
+    "hrPeopleWindow": "Window",
+    "@hrPeopleWindow": {
+        "description": "Label on the control that picks which dates the register's attendance line covers."
+    },
+    "hrPeopleAttendanceLine": "{present} present · {late} late · {worked}",
+    "@hrPeopleAttendanceLine": {
+        "description": "Third line under a name in the register. Present and late are DAYS, not punches. Keep the separators.",
+        "placeholders": {
+            "present": { "type": "int" },
+            "late": { "type": "int" },
+            "worked": { "type": "String", "example": "144h 0m" }
+        }
+    },
+    "hrAttendanceTitle": "Attendance",
+    "@hrAttendanceTitle": {
+        "description": "Title of the screen showing one employee's attendance day by day."
+    },
+    "hrAttendanceEmpty": "No days in this window.",
+    "@hrAttendanceEmpty": {
+        "description": "Shown when the chosen range contains no days at all, which is only possible on a range the server clamped away to nothing."
+    },
+    "hrPersonFullHistory": "View full history",
+    "@hrPersonFullHistory": {
+        "description": "Opens the day-by-day attendance for this person from the counted summary on their record."
+    },
+    "hrPeriodDaily": "Daily",
+    "@hrPeriodDaily": {
+        "description": "One of four windows the server resolves. Daily is the last thirty days."
+    },
+    "hrPeriodWeekly": "Weekly",
+    "@hrPeriodWeekly": {
+        "description": "This week to date, as the company's week runs."
+    },
+    "hrPeriodMonthly": "Monthly",
+    "@hrPeriodMonthly": {
+        "description": "This month to date."
+    },
+    "hrPeriodCustom": "Custom",
+    "@hrPeriodCustom": {
+        "description": "Two dates chosen by hand. The picker is anchored on the company's today, not the handset's."
+    },
     "hrPeopleStatusActive": "Active",
     "hrPeopleStatusInactive": "Inactive",
     "hrPeopleStatusTerminated": "Left",
