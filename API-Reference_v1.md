@@ -3,7 +3,7 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **6a6d7a2** (2026-09-23). If the API behaves differently from
+> Taken from `hr-backend` @ **1fa7fa7** (2026-09-24). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
 >
 > The content is byte-identical to the backend's copy below this stamp; re-check with
@@ -767,6 +767,8 @@ same void-and-re-enter path HR uses by hand, so it carries the same audit trail.
 ```json
 {
   "ok": true,
+  "today": "2026-08-04",
+  "server_time": "2026-08-04T10:15:00-04:00",
   "requests": [
     { "id": 7, "type": "out", "work_date": "2026-08-03",
       "requested_at": "2026-08-03T18:00:00-04:00",
@@ -783,6 +785,12 @@ same void-and-re-enter path HR uses by hand, so it carries the same audit trail.
   ]
 }
 ```
+
+`today` and `server_time` are the **company's** date and wall clock, and are
+where a new request's form should open. A correction cannot be raised for a time
+that has not happened, and the handset's own clock does not know where that line
+is — a phone a few hours ahead of the company would propose a time this endpoint
+then refuses.
 
 `recent_punches` is the last 30, newest first, and is why this list ships them:
 `/attendance/history` answers in day-shaped rows and carries no punch ids, so
@@ -1661,6 +1669,13 @@ building them.
 
 A row whose person has no punches in the window carries zeros, not `null`.
 
+`worked_minutes` and `break_minutes` are what the badge recorded: breaks that
+were actually punched come off, and nothing else does. They are **not** payroll
+figures — payroll charges a shift's nominal break on a long day nobody punched
+one for, and these do not. The numbers therefore match
+`GET /hr/employees/{id}/attendance` for the same window exactly, which is the
+point: that endpoint is one tap away from this list.
+
 ### `GET /hr/employees/{id}`
 
 One record in full, plus three things the stored row does not hold: every active
@@ -1690,6 +1705,9 @@ rather than listed**, and whether the person can sign in at all.
   }
 }
 ```
+
+`emergency_contact` is **always an object**. A part nobody filled in is left
+out, so a person with no contact on file is `{}` — never `null`, and never `[]`.
 
 A leave type the employee has never touched still appears, at its full
 entitlement: "no balance row" and "nothing taken" look identical on a phone and
@@ -1739,7 +1757,8 @@ device clock, or the picker offers a day the server then refuses.
       "late": false, "early_leave": false,
       "first_in": "2026-08-03T09:00:00-04:00", "last_out": "2026-08-03T18:00:00-04:00",
       "break_start": "2026-08-03T13:00:00-04:00", "break_end": "2026-08-03T14:00:00-04:00",
-      "break_minutes": 60, "worked_minutes": 480, "punches": 4,
+      "break_count": 1, "break_minutes": 60,
+      "worked_minutes": 480, "punches": 4,
       "holiday": null, "shift": "Morning Shift", "remarks": null }
   ],
   "totals": {
@@ -1757,6 +1776,15 @@ device clock, or the picker offers a day the server then refuses.
 one left open at check-out counts as nothing — its length is unknown, and
 guessing it long would cut somebody's hours. A day never clocked out reports
 `worked_minutes: 0` rather than a guess.
+
+`break_count` is how many breaks were **started**, and it is the field that
+makes the other three readable. On a day with one break the two timestamps are
+that break. On a day with three they are the envelope around all of them, so
+`break_start` 11:00 and `break_end` 13:45 alongside `break_minutes: 60` is
+correct and looks wrong. Show the times only while `break_count` is 1; above
+that show the count and the total, exactly as `punches` qualifies `first_in` and
+`last_out`. A break started and never ended is counted here but contributes no
+minutes, so the count can exceed what the total accounts for.
 
 **Failures:** `invalid_range` (422) · `range_too_large` (422) · `forbidden` (403) · `validation_failed` (422)
 
