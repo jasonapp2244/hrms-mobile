@@ -39,6 +39,10 @@ The app needs a running API. Either the deployed one —
 (`php artisan serve`, and **MySQL started from the XAMPP Control Panel**;
 launching `mysqld.exe` as a background task does not persist, it exits).
 
+**The deployed one is the default** — a plain `flutter run` or `flutter build`
+talks to live data. To work against a local backend instead, pass
+`--dart-define=API_BASE=http://10.0.2.2:8000/api/v1` (`lib/core/api_client.dart`).
+
 A handset or emulator cannot reach `127.0.0.1` on the host machine. Use the
 machine's LAN address, or `10.0.2.2` on the Android emulator.
 

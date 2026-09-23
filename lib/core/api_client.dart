@@ -86,14 +86,16 @@ class ApiClient {
 
   final http.Client _http;
 
-  /// 10.0.2.2 is the host machine as seen from inside the Android emulator —
-  /// `localhost` there is the emulator itself, which serves nothing.
+  /// The live server by default, so a build handed to the client reaches real
+  /// data with no flag to remember.
   ///
-  /// Override for a real device or a deployed server:
-  ///   flutter run --dart-define=API_BASE=https://hrams.devonlinetestserver.com/api/v1
+  /// Override to work against a local backend. 10.0.2.2 is the host machine as
+  /// seen from inside the Android emulator — `localhost` there is the emulator
+  /// itself, which serves nothing:
+  ///   flutter run --dart-define=API_BASE=http://10.0.2.2:8000/api/v1
   static const String baseUrl = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'http://10.0.2.2:8000/api/v1',
+    defaultValue: 'https://hrams.devonlinetestserver.com/api/v1',
   );
 
   /// The public site behind the API — where the privacy policy and the account
