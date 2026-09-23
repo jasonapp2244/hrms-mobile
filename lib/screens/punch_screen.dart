@@ -200,7 +200,7 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         session.api,
         '/attendance/today',
         key: OfflineCache.keyToday,
-        stillValid: (body) => '${body['date']}' == _ymd(DateTime.now()),
+        stillValid: (body) => savedTodayStillHolds(body, DateTime.now()),
       );
 
       if (!mounted) return;
@@ -1269,4 +1269,43 @@ class _PunchList extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Whether a saved `/attendance/today` is still today — **the company's**.
+///
+/// It used to be compared with the handset's date, which is trap 30: the
+/// phone is wherever its owner is. A phone behind the company, just after
+/// the company's midnight, accepted yesterday's copy and greeted somebody
+/// with "clocked in since 09:00" from the day before; a phone ahead refused
+/// a perfectly good one.
+///
+/// `server_time` carries the company's offset, so the company's date now is
+/// the current instant moved by that offset — no clock of the handset's
+/// involved. And the day compared is the one the copy was **taken** on, not
+/// its `date`: on a night shift `date` is the shift's first day, so a copy
+/// taken at 01:00 would otherwise be refused at 01:05.
+///
+/// A copy with no usable `server_time` falls back to the old comparison
+/// rather than being trusted outright.
+@visibleForTesting
+bool savedTodayStillHolds(Map<String, dynamic> body, DateTime now) {
+  final raw = '${body['server_time'] ?? ''}';
+  // A company on UTC may be written with `Z` rather than `+00:00`.
+  final stamp = raw.endsWith('Z')
+      ? '${raw.substring(0, raw.length - 1)}+00:00'
+      : raw;
+  final offset = RegExp(r'([+-])(\d{2}):(\d{2})$').firstMatch(stamp);
+
+  if (offset == null || stamp.length < 10) {
+    return '${body['date']}' == _PunchScreenState._ymd(now);
+  }
+
+  final sign = offset.group(1) == '-' ? -1 : 1;
+  final shift = Duration(
+    hours: int.parse(offset.group(2)!),
+    minutes: int.parse(offset.group(3)!),
+  );
+  final companyNow = now.toUtc().add(shift * sign);
+
+  return stamp.substring(0, 10) == _PunchScreenState._ymd(companyNow);
 }
