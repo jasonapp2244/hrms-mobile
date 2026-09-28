@@ -324,6 +324,58 @@ void main() {
       expect(find.textContaining('2026-11-02'), findsNothing);
     });
 
+    testWidgets('closing the reject dialog does not tear the page down',
+        (tester) async {
+      // Found on a handset: the dialog's text controller was disposed the
+      // moment the dialog returned, while its closing animation still drew the
+      // text field — a red "_dependents.isEmpty" screen in a debug build, and
+      // a broken page behind it in a release one.
+      await pumpHr(
+        tester,
+        hrSession(tester, pending: {
+          'ok': true,
+          'pending_count': 1,
+          'pending': [
+            {
+              'id': 7,
+              'employee': 'Ann Lee',
+              'department': 'Ops',
+              'leave_type': 'Annual Leave',
+              'start_date': '2026-11-02',
+              'end_date': '2026-11-03',
+              'days': 2,
+              'is_half_day': false,
+              'balance': {
+                'entitled': 20,
+                'used': 4,
+                'available': 16,
+                'capped': true,
+                'would_exceed': false,
+              },
+              'clashes': [],
+            },
+          ],
+        }),
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Reject'));
+      await tester.pumpAndSettle();
+
+      // A reason is required, so the button waits for one.
+      final confirm = find.widgetWithText(FilledButton, 'Reject');
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), 'Not this week.');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Ann Lee'), findsOneWidget);
+    });
+
     testWidgets('a request that would overspend says so before the tap',
         (tester) async {
       // The server makes the same comparison `approve()` will make. Finding

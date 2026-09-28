@@ -154,6 +154,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final t = context.t;
+    final user = SessionScope.of(context).user;
+
+    // The tab a row's button names is the tab the shell will open for this
+    // person — HR's "requested leave" opens the HR tab, not a Team tab HR
+    // does not have.
+    String? tabOf(AppNotification n) => n.route?.tabFor(
+          leadsATeam: user?.leadsATeam == true,
+          hasHrArea: user?.hasHrArea == true,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -192,6 +201,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (_, i) => _NotificationCard(
                     notification: _notifications[i],
+                    destinationTab: tabOf(_notifications[i]),
                     colors: colors,
                     onRead: () => _markRead(_notifications[i]),
                     onFollow: () => _follow(_notifications[i]),
@@ -206,12 +216,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
     required this.notification,
+    required this.destinationTab,
     required this.colors,
     required this.onRead,
     required this.onFollow,
   });
 
   final AppNotification notification;
+
+  /// Where "Open …" goes for this person; null draws no button at all.
+  final String? destinationTab;
   final AppColors colors;
   final VoidCallback onRead;
   final VoidCallback onFollow;
@@ -291,7 +305,7 @@ class _NotificationCard extends StatelessWidget {
                         color: theme.colorScheme.outline,
                       ),
                     ),
-                    if (notification.route != null)
+                    if (destinationTab != null)
                       TextButton(
                         onPressed: onFollow,
                         style: TextButton.styleFrom(
@@ -301,7 +315,7 @@ class _NotificationCard extends StatelessWidget {
                         ),
                         child: Text(
                           t.notificationsOpenTab(
-                            tabLabel(t, notification.route!.tabId),
+                            tabLabel(t, destinationTab!),
                           ),
                         ),
                       ),

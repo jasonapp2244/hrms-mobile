@@ -132,6 +132,35 @@ void main() {
       expect(PushRoute.approvals.tabId, 'team');
     });
 
+    test('a leave request lands on whichever desk this person approves from', () {
+      // Found on a handset: HR is sent the same "requested leave" notification
+      // as a line manager, and HR has no Team tab — so "Open Team" dropped HR
+      // on the Clock screen. HR decides from the HR tab.
+      expect(
+        PushRoute.approvals.tabFor(leadsATeam: true, hasHrArea: false),
+        'team',
+      );
+      expect(
+        PushRoute.approvals.tabFor(leadsATeam: false, hasHrArea: true),
+        'hr',
+      );
+      // Somebody who is both keeps the team inbox, which is where a request
+      // from their own report arrives first.
+      expect(
+        PushRoute.approvals.tabFor(leadsATeam: true, hasHrArea: true),
+        'team',
+      );
+      // And somebody with neither has nowhere to go — no button, not a wrong one.
+      expect(
+        PushRoute.approvals.tabFor(leadsATeam: false, hasHrArea: false),
+        isNull,
+      );
+
+      for (final route in PushRoute.values.where((r) => r != PushRoute.approvals)) {
+        expect(route.tabFor(leadsATeam: false, hasHrArea: false), route.tabId);
+      }
+    });
+
     test('a tab id has a name in every language the app is built in', () {
       // The ids above are only useful because something turns them into words.
       // A route whose id the shell cannot name would draw an "Open" button with

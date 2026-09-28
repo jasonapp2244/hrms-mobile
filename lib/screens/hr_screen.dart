@@ -275,61 +275,17 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
     required String hint,
     required String confirmLabel,
     required bool required,
-  }) async {
-    final controller = TextEditingController();
-    final t = context.t;
-
-    final result = await showDialog<String>(
+  }) {
+    return showDialog<String>(
       context: context,
-      builder: (context) {
-        String? error;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: Text(title),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(body),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  maxLines: 3,
-                  maxLength: 1000,
-                  decoration: InputDecoration(
-                    labelText: hint,
-                    errorText: error,
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(t.actionCancel),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final text = controller.text.trim();
-                  if (required && text.isEmpty) {
-                    setDialogState(() => error = t.hrApprovalsReason);
-                    return;
-                  }
-                  Navigator.of(context).pop(text);
-                },
-                child: Text(confirmLabel),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (_) => _NoteDialog(
+        title: title,
+        body: body,
+        hint: hint,
+        confirmLabel: confirmLabel,
+        required: required,
+      ),
     );
-
-    controller.dispose();
-
-    return result;
   }
 
   @override
@@ -548,6 +504,88 @@ class _DecidedRow extends StatelessWidget {
         '${Fmt.range(t, item.startDate, item.endDate)}'
         '${item.decidedBy != null ? ' · ${t.hrDecidedBy(item.decidedBy!)}' : ''}',
       ),
+    );
+  }
+}
+
+/// Asks HR for the note that goes with a decision.
+///
+/// A widget of its own so that it owns its text controller. The controller
+/// used to be disposed by the caller the moment `showDialog` returned — while
+/// the dialog's closing animation was still drawing the text field — which
+/// is a framework assertion in a debug build and a broken page in a release
+/// one. Disposed here, it goes when the dialog is actually gone.
+class _NoteDialog extends StatefulWidget {
+  const _NoteDialog({
+    required this.title,
+    required this.body,
+    required this.hint,
+    required this.confirmLabel,
+    required this.required,
+  });
+
+  final String title;
+  final String body;
+  final String hint;
+  final String confirmLabel;
+  final bool required;
+
+  @override
+  State<_NoteDialog> createState() => _NoteDialogState();
+}
+
+class _NoteDialogState extends State<_NoteDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    // Waits for a reason rather than refusing one after the tap, as the
+    // manager's inbox does — the button says what the form needs.
+    final ready = !widget.required || _controller.text.trim().isNotEmpty;
+
+    return AlertDialog(
+      // A two-line title plus the keyboard leaves a small phone short of room;
+      // scrolling beats cutting the bottom of the text field off.
+      scrollable: true,
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.body),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: widget.required,
+            maxLines: 3,
+            maxLength: 1000,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: widget.hint,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(t.actionCancel),
+        ),
+        FilledButton(
+          onPressed: ready
+              ? () => Navigator.of(context).pop(_controller.text.trim())
+              : null,
+          child: Text(widget.confirmLabel),
+        ),
+      ],
     );
   }
 }

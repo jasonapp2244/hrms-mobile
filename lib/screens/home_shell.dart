@@ -124,10 +124,21 @@ class _HomeShellState extends State<HomeShell> {
     // this morning — must not sit in the notifier retrying on every rebuild.
     session.push.pendingRoute.value = null;
 
-    final tabs = _tabsFor(context.t, session.user);
-    final target = tabs.indexWhere((tab) => tab.id == route.tabId);
+    final user = session.user;
+    final tabId = route.tabFor(
+      leadsATeam: user?.leadsATeam == true,
+      hasHrArea: user?.hasHrArea == true,
+    );
+    final tabs = _tabsFor(context.t, user);
+    final target = tabs.indexWhere((tab) => tab.id == tabId);
     if (target == -1) return;
 
+    // The notification is news about that tab, so it must show the news even
+    // when the person was already on it — `_select` alone changes nothing then.
+    if (target == _index) {
+      _visibility[tabs[target].id]?.showAgain();
+      return;
+    }
     _select(target, tabs);
   }
 

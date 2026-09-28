@@ -254,6 +254,9 @@ class _ApprovalsTabState extends State<_ApprovalsTab> with RefreshOnShow {
         builder: (ctx, setLocal) {
           final valid = !required || controller.text.trim().isNotEmpty;
           return AlertDialog(
+            // A long name wraps the title, and with the keyboard up a small
+            // phone runs out of room — scroll rather than clip the field.
+            scrollable: true,
             title: Text(title),
             content: Column(
               mainAxisSize: MainAxisSize.min,

@@ -43,6 +43,23 @@ enum PushRoute {
   /// notification would otherwise open nothing at all on a Spanish handset.
   final String tabId;
 
+  /// The tab that answers this route for one particular person, or null when
+  /// they have no such tab.
+  ///
+  /// Only `approvals` depends on who is asking. The server sends the same
+  /// "requested leave" notification to a line manager and, once a manager has
+  /// seconded it, to HR — and HR has no Team tab: HR decides from the HR tab,
+  /// whose first page is its approvals. Somebody who leads a team keeps the
+  /// Team inbox even if they also have the HR tab, because that is where a
+  /// request from their own report arrives first.
+  String? tabFor({required bool leadsATeam, required bool hasHrArea}) =>
+      switch (this) {
+        PushRoute.approvals when leadsATeam => 'team',
+        PushRoute.approvals when hasHrArea => 'hr',
+        PushRoute.approvals => null,
+        _ => tabId,
+      };
+
   /// Null for anything unrecognised — a newer server sending a route this build
   /// has never heard of must open the app normally, not crash it.
   static PushRoute? parse(Object? value) {

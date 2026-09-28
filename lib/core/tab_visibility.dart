@@ -14,6 +14,17 @@ import 'package:flutter/widgets.dart';
 /// own flag turns true.
 class TabVisibility extends ValueNotifier<bool> {
   TabVisibility({required bool visible}) : super(visible);
+
+  /// Tells a tab that is already on screen to look again.
+  ///
+  /// Setting `value` to true when it is already true notifies nobody, which is
+  /// right for an ordinary tap on the current tab and wrong for a tapped
+  /// notification: HR sitting on the HR tab tapped "requested leave" and was
+  /// left looking at "Nothing waiting". A tab off screen is left alone — it
+  /// refetches when it is shown.
+  void showAgain() {
+    if (value) notifyListeners();
+  }
 }
 
 /// Refetches a screen's data whenever the user returns to its tab.
