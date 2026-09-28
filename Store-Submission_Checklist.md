@@ -278,10 +278,14 @@ compares them, and a mismatch is a rejection.
 | IP address | Yes | No | Security / fraud prevention | Yes |
 | Precise location | Yes — see below | No | App functionality | Yes |
 | Crash logs / diagnostics | Yes — B6.5 | No | App functionality | Yes |
+| Device or other IDs (push token) | Yes — see §8 | No — Google delivers it as a service provider | App functionality | Yes |
 | Advertising ID / analytics | No | No | — | — |
 
-Answer **no** to tracking on both forms: there is no advertising SDK, no
-analytics, and the only host the app contacts is the employer's own server.
+Answer **no** to tracking on both forms: there is no advertising SDK and no
+analytics. The app contacts two hosts — the employer's own server, and Google's
+Firebase Cloud Messaging to obtain a push token. FCM is a service provider
+delivering the employer's notifications, which both stores count as
+collection but not as sharing.
 
 > **Crash logs (B6.5) are collected, and that answer stays "no third party".**
 > Crashes are written on the handset and posted to the employer's own server,
@@ -327,10 +331,13 @@ Whether a notification can actually appear depends on the build: without
 nothing arrives. Both states are consistent with the declaration — the
 permission may be asked for and unused.
 
-**Before submitting a build that has the Firebase config in it**, revisit the
-data-safety form: an FCM token is a device identifier, and both stores treat
+**Builds now carry the Firebase config** (project `kemp-805c6`, Android app
+`com.hrms.attendance`; the file is gitignored, so a fresh clone still builds
+without push). An FCM token is a device identifier, and both stores treat
 "registers a push token" as data collection even when the notifications
-themselves carry no personal data.
+themselves carry no personal data — hence the "Device or other IDs" row in §7
+and the `DeviceID` entry in `PrivacyInfo.xcprivacy`. Declare it on both console
+forms before submitting.
 
 ### 9. Console forms that block publication, and are nobody's code
 

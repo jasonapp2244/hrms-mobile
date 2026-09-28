@@ -21,9 +21,10 @@
 
   What is declared and why:
 
-  Tracking is false. The app has no advertising SDK, no analytics, and never
-  shares anything with a third party — the only host it talks to is the
-  employer's own server.
+  Tracking is false. The app has no advertising SDK and no analytics. It talks
+  to two hosts: the employer's own server, and Google's Firebase Cloud
+  Messaging, which issues the push token and delivers the employer's
+  notifications as a service provider — declared below as DeviceID.
 
   Location IS listed, as precise: B2.3 shipped and the app reads a fix through
   `geolocator` at the moment of a punch and sends it with the punch. It declares
@@ -117,6 +118,22 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- The push token (FCM): identifies the installation so reminders and
+		     leave decisions can reach it. Registered against the signed-in
+		     account, so linked; dropped at sign-out. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

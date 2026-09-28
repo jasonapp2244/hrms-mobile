@@ -250,9 +250,12 @@ B6.5 is a table on the employer's own server, not Crashlytics, not Sentry. That
 is a decision, not an oversight: a stack trace routinely carries fragments of
 whatever the app was holding, and four documents — `/privacy`, the Apple
 privacy manifest, and both store data forms — say the app shares nothing with
-any third party and contacts exactly one host. A crash SDK falsifies all four at
-once. If one is ever added, they all change with it, and so does the answer to
-the tracking question.
+any third party. Since push was switched on (2026-09-28, Firebase project
+`kemp-805c6`) it contacts **two** hosts: the employer's server, and Google's FCM,
+which holds only the push token, as a service provider. That is the one
+exception and all four documents now say so. A crash SDK would falsify all four
+at once. If one is ever added, they all change with it, and so does the answer
+to the tracking question.
 
 The rest of the design follows from what a crash reporter has to survive:
 

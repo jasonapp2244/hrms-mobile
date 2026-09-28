@@ -28,9 +28,17 @@ FCM has no per-message charge.
 
 Note the **Project ID** (Project settings → General). It is not a secret.
 
+**Done 2026-09-28: the project is `KEMP`, id `kemp-805c6`.** One project serves
+staging and production — same package, same app. Leave Google Analytics
+unlinked and add no other Firebase product; only Cloud Messaging is used, and
+the privacy declarations say exactly that.
+
 ### 2. Register the Android app
 
-Project settings → **Your apps** → Add app → Android.
+Project settings → **Your apps** → Add app → **Android** — the Android icon,
+not the Flutter one, which drives the `flutterfire` CLI and generates a
+`firebase_options.dart` this app deliberately does without
+(`Firebase.initializeApp()` reads the native file).
 
 Package name must be exactly:
 
@@ -40,12 +48,14 @@ com.hrms.attendance
 
 This has to match the app's `applicationId` character for character — Firebase
 issues credentials per package name, and a mismatch fails at registration with
-an error that does not name the cause. The value lives in
-`mobile/android/app/build.gradle.kts` and is the app's permanent Play identity;
+an error that does not name the cause. It was first registered as
+`com.kemp.attendance` by mistake; check `package_name` in the downloaded file
+before copying it in. The value lives in
+`android/app/build.gradle.kts` and is the app's permanent Play identity;
 check there rather than trusting this document if the two ever disagree.
 
 Download `google-services.json` and place it in the Flutter repo at
-`mobile/android/app/google-services.json`. It is gitignored there.
+`android/app/google-services.json`. It is gitignored there.
 
 ### 3. Register the iOS app (only when you have an Apple Developer account)
 
@@ -62,7 +72,7 @@ works without any of this.
 Project settings → **Service accounts** → *Generate new private key*. A JSON
 file downloads.
 
-Put it at `hrms/storage/app/firebase/service-account.json`.
+Put it on the server, in the backend checkout, at `storage/app/firebase/service-account.json`.
 
 **This file is a credential.** Anyone holding it can send a notification to
 every installation of the app. It is gitignored, it lives outside the web root,
@@ -70,18 +80,29 @@ and it should never be emailed or pasted into a chat.
 
 ### 5. Switch it on
 
-In `hrms/.env`:
+In the backend's `.env`:
 
 ```env
 FCM_ENABLED=true
 FCM_PROJECT_ID=your-project-id
 ```
 
-Then `php artisan config:clear`.
+Then, as the site user so root does not end up owning the cache:
+
+```bash
+php artisan config:cache
+php artisan queue:restart
+php artisan emp:preflight --non-production   # expect: OK Push (FCM) configured
+```
+
+`config:clear` is not enough on a deployed server: `deploy.sh` caches the
+config, and the queue worker keeps the settings it started with until it is
+restarted — so `FCM_ENABLED` stays false in exactly the process that sends.
 
 ### 6. Run a queue worker
 
-Push is queued along with email. Without a worker nothing is delivered:
+Push is queued along with email. Without a worker nothing is delivered. On a
+deployed server `emp-worker.service` already is one; locally:
 
 ```bash
 php artisan queue:work
@@ -123,7 +144,7 @@ each.
 
 ## What the app does
 
-All of it lives in `mobile/lib/core/push.dart`, owned by `Session` because
+All of it lives in `lib/core/push.dart`, owned by `Session` because
 registration is a consequence of signing in.
 
 - **Asks for permission** at sign-in, not at first launch. Android 13+ requires
@@ -162,7 +183,7 @@ build picks it up with no edit.
 
 Xcode has to add the **Push Notifications** capability to the Runner target — it
 writes an entitlements file and registers an App ID, and both need a signed-in
-Apple Developer account. Open `mobile/ios/Runner.xcworkspace` → Runner →
+Apple Developer account. Open `ios/Runner.xcworkspace` → Runner →
 Signing & Capabilities → **+ Capability** → Push Notifications. Without it iOS
 never registers for remote notifications and `getToken()` returns null forever.
 
