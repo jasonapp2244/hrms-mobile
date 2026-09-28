@@ -3,7 +3,7 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **1fa7fa7** (2026-09-24). If the API behaves differently from
+> Taken from `hr-backend` @ **44f29a1** (2026-09-29). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
 >
 > The content is byte-identical to the backend's copy below this stamp; re-check with
@@ -1343,7 +1343,7 @@ can reach that was not sent to them.
       "body": "Your Annual Leave for 12 to 14 Sep 2026 has been approved.",
       "route": "leave",
       "read_at": null,
-      "created_at": "2026-09-09T14:02:11+00:00"
+      "created_at": "2026-09-09T10:02:11-04:00"
     }
   ],
   "unread": 3,
@@ -1353,6 +1353,11 @@ can reach that was not sent to them.
 
 `unread` counts **everything** unread, not what is on the page — it is what the
 badge shows.
+
+`created_at` and `read_at` are on the **company's clock**, offset included —
+the same instant as UTC, with the digits to print. Read the date off the string
+(as `Fmt.shortDate` does); parsing it into a UTC moment dates an evening
+notification in the US as the next day.
 
 `route` is the same vocabulary as a push payload's: `clock`, `leave`,
 `schedule`, `approvals`, or **null**. Null is an ordinary answer — a

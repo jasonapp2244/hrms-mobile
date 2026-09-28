@@ -595,6 +595,22 @@ void main() {
       expect(Fmt.timeOf(es, '2026-08-03T18:00:00-04:00'), '06:00 p. m.');
     });
 
+    test('a zoned timestamp keeps the date it was written with', () {
+      // Found by the timezone audit: a notification at 21:30 in New York
+      // arrives as "2026-08-03T21:30:00-04:00", and DateTime.parse turns that
+      // into 01:30 UTC on the 4th — so the list said "4 Aug" for something
+      // that happened on the 3rd. The date is read off the string, as timeOf
+      // reads the clock.
+      final en = lookupAppLocalizations(const Locale('en'));
+
+      expect(Fmt.shortDate(en, '2026-08-03T21:30:00-04:00'), '3 Aug');
+      expect(Fmt.longDate(en, '2026-08-03T21:30:00-04:00'), '3 August 2026');
+      // A bare date is unchanged.
+      expect(Fmt.shortDate(en, '2026-08-04'), '4 Aug');
+      // And something that is not a date is handed back as it came.
+      expect(Fmt.shortDate(en, 'soon'), 'soon');
+    });
+
     test('a weekday the server wrote in English is drawn in the right one', () {
       // The roster and the history list both carry a weekday string from a
       // server that has no idea who is reading it.

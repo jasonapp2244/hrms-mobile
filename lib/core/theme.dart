@@ -281,18 +281,34 @@ class AppColors {
 /// every screen in the app, and it would be a launch-time failure introduced by
 /// a translation change.
 class Fmt {
-  /// "2026-08-04" → "4 Aug". Parsed as a plain calendar date: these strings
-  /// carry no timezone and adding one would shift the day.
+  /// "2026-08-04" → "4 Aug". Read as the calendar date written at the start
+  /// of the string, never parsed into a moment: a zoned timestamp —
+  /// "2026-08-03T21:30:00-04:00", the company's evening — becomes 01:30 UTC on
+  /// the 4th under DateTime.parse, and the list said "4 Aug" for something
+  /// that happened on the 3rd. Same rule as [timeOf], which reads the clock
+  /// off the string for the same reason.
   static String shortDate(AppLocalizations t, String iso) {
-    final d = DateTime.tryParse(iso);
+    final d = _calendarDate(iso);
     if (d == null) return iso;
     return t.dateShort('${d.day}', monthShort(t, d.month));
   }
 
   static String longDate(AppLocalizations t, String iso) {
-    final d = DateTime.tryParse(iso);
+    final d = _calendarDate(iso);
     if (d == null) return iso;
     return t.dateLong('${d.day}', monthLong(t, d.month), '${d.year}');
+  }
+
+  /// The Y-M-D a string opens with, as written. Null when it does not open
+  /// with one.
+  static ({int year, int month, int day})? _calendarDate(String iso) {
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(iso);
+    if (m == null) return null;
+    return (
+      year: int.parse(m.group(1)!),
+      month: int.parse(m.group(2)!),
+      day: int.parse(m.group(3)!),
+    );
   }
 
   /// `office` / `wfh` / `hybrid` as a person would say it. Shared by the

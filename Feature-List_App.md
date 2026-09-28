@@ -259,3 +259,11 @@ Staging data, not code: `hr@emp.test` had lost EMP-0006 to the pre-rename
 `hr@hrms.test` login; relinked by hand on the server.
 
 ---
+
+*2026-09-29, timezone audit (a US client). One app fault: the notification
+centre dated an evening notification the next day — `Fmt.shortDate` parsed the
+timestamp into a UTC moment. It now reads the date off the string, as `timeOf`
+reads the clock, and the server sends notification times on the company's
+clock with the offset. Everything else was already anchored to the company:
+times arrive pre-formatted, "today" comes from `server_time`/`today`, and the
+device clock is used only for elapsed-time measurements. 1.0.4.*
