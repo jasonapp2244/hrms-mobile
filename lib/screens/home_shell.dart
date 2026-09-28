@@ -58,6 +58,32 @@ class _HomeShellState extends State<HomeShell> {
   Session? _session;
   StreamSubscription<PushMessage>? _foreground;
 
+  final _resume = ResumeCheck();
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
+  }
+
+  /// Back in the app after a while: the tab on screen looks again, as it would
+  /// have had the person switched to it.
+  void _onLifecycle(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _resume.left();
+      case AppLifecycleState.resumed:
+        if (!_resume.cameBack() || !mounted) return;
+        final tabs = _tabsFor(context.t, _session?.user);
+        _visibility[tabs[_index.clamp(0, tabs.length - 1)].id]?.showAgain();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -188,6 +214,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _detachPush();
     for (final flag in _visibility.values) {
       flag.dispose();

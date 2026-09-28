@@ -51,6 +51,42 @@ void main() {
     expect(state.refreshes, 1);
   });
 
+  group('coming back to the app', () {
+    // Found on a handset: HR left the app on the HR tab, the request on it was
+    // decided elsewhere, and a quarter of an hour later the phone still offered
+    // Approve on it. Nothing refetched on the way back in.
+    var now = DateTime(2026, 9, 29, 9);
+    ResumeCheck check() => ResumeCheck(clock: () => now);
+
+    test('a long absence asks for fresh data', () {
+      final c = check();
+      c.left();
+      now = now.add(const Duration(minutes: 15));
+      expect(c.cameBack(), isTrue);
+    });
+
+    test('a quick trip out — the file picker, a permission — does not', () {
+      final c = check();
+      c.left();
+      now = now.add(const Duration(seconds: 5));
+      expect(c.cameBack(), isFalse);
+    });
+
+    test('the absence is measured from the first time it left', () {
+      // Paused then hidden arrive together; the second must not restart the clock.
+      final c = check();
+      c.left();
+      now = now.add(const Duration(seconds: 25));
+      c.left();
+      now = now.add(const Duration(seconds: 10));
+      expect(c.cameBack(), isTrue);
+    });
+
+    test('coming back without having left is not an absence', () {
+      expect(check().cameBack(), isFalse);
+    });
+  });
+
   testWidgets('showing again a tab that is off screen does nothing', (tester) async {
     final flag = TabVisibility(visible: false);
     await tester.pumpWidget(_Counting(flag));

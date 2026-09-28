@@ -249,6 +249,11 @@ first time on a real device, all four roles, debug and release builds.
   controller; it also autofocuses and holds Reject until a reason is typed, as
   the manager's does. Both note dialogs scroll, because a two-line title plus
   the keyboard overflowed by 13px.
+- **Coming back to the app showed stale data.** HR left the phone on the HR tab;
+  a quarter of an hour later it still offered Approve on a request decided
+  elsewhere. Back after 30 s or more, the tab on screen now refetches
+  (`ResumeCheck`, wired in `HomeShell`); a quicker trip out — the file picker, a
+  permission prompt — does not. 1.0.3.
 
 Staging data, not code: `hr@emp.test` had lost EMP-0006 to the pre-rename
 `hr@hrms.test` login; relinked by hand on the server.

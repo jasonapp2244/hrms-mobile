@@ -27,6 +27,35 @@ class TabVisibility extends ValueNotifier<bool> {
   }
 }
 
+/// Whether the app was away long enough that the tab on screen is out of date.
+///
+/// Switching tabs refetches; coming back to the app did not, so a phone left
+/// on the HR tab still offered Approve on a request decided a quarter of an
+/// hour earlier. The threshold keeps a quick trip out — the file picker for a
+/// leave attachment, a permission prompt — from reloading what the person is
+/// in the middle of. The same shape as the app gate's own re-check.
+class ResumeCheck {
+  ResumeCheck({
+    this.after = const Duration(seconds: 30),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final Duration after;
+  final DateTime Function() _clock;
+  DateTime? _leftAt;
+
+  /// The app went to the background. Paused and hidden both arrive; the first
+  /// one starts the clock.
+  void left() => _leftAt ??= _clock();
+
+  /// The app is back. True when it was away for at least [after].
+  bool cameBack() {
+    final left = _leftAt;
+    _leftAt = null;
+    return left != null && _clock().difference(left) >= after;
+  }
+}
+
 /// Refetches a screen's data whenever the user returns to its tab.
 ///
 /// Mix this into a screen's [State], point [visibility] at the flag the shell
