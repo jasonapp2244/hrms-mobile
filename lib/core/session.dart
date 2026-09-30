@@ -399,18 +399,41 @@ class Session extends ChangeNotifier {
     final res = await api.post('/auth/login', body: {
       'email': email.trim(),
       'password': password,
-      'device_name': await deviceName(),
-      // B1.6. Sent on every sign-in, and used only by a company that has
-      // switched binding on — the server decides, so the app has no policy to
-      // read and nothing to get wrong.
-      'device_id': await deviceId(),
-      'platform': defaultTargetPlatform == TargetPlatform.iOS
-          ? 'ios'
-          : defaultTargetPlatform == TargetPlatform.android
-              ? 'android'
-              : 'other',
+      ...await _deviceFields(),
     });
 
+    await _signedIn(res);
+  }
+
+  /// Signs in with the one-time code from the welcome email (A4.21).
+  ///
+  /// The code stands in for the password and for nothing else — it never
+  /// records a punch — so everything after the server's answer is exactly
+  /// what [login] does.
+  Future<void> activate(String scanned) async {
+    final res = await api.post('/auth/activate', body: {
+      'code': scanned.trim(),
+      ...await _deviceFields(),
+    });
+
+    await _signedIn(res);
+  }
+
+  /// What every sign-in says about the handset.
+  Future<Map<String, dynamic>> _deviceFields() async => {
+        'device_name': await deviceName(),
+        // B1.6. Sent on every sign-in, and used only by a company that has
+        // switched binding on — the server decides, so the app has no policy to
+        // read and nothing to get wrong.
+        'device_id': await deviceId(),
+        'platform': defaultTargetPlatform == TargetPlatform.iOS
+            ? 'ios'
+            : defaultTargetPlatform == TargetPlatform.android
+                ? 'android'
+                : 'other',
+      };
+
+  Future<void> _signedIn(Map<String, dynamic> res) async {
     final token = '${res['token']}';
     await _storage.write(key: _tokenKey, value: token);
     api.token = token;

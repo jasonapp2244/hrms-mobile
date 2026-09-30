@@ -25,7 +25,7 @@ A gap means a trap that belongs to the server.
 ```bash
 flutter pub get
 flutter analyze
-flutter test                 # 327 tests
+flutter test -j 1            # 375 tests
 ```
 
 The app's strings are generated from `lib/l10n/*.arb` on `flutter pub get` and
@@ -542,7 +542,8 @@ grep -oE 'android:name="android\.permission\.[A-Z_]+"' \
   build/app/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml | sort -u
 ```
 
-The list should be the eight in the main manifest and nothing else.
+The list should be the eight in the main manifest plus `CAMERA` (A4.21), and
+nothing else.
 
 ### 33. `useSafeArea: true` does not cover the bottom of a bottom sheet
 
@@ -638,6 +639,28 @@ The punch itself goes through the screen's own `_punch()`, so the fence, the
 fix, the cooldown and the offline queue are not reimplemented behind it.
 
 ---
+
+### QR check-in (B2.9 / A4.21) — added 2026-09-30
+
+- **The server decides the method.** `GET /attendance/today` carries `method`
+  (`button` | `qr`); the app never reads the policy or the work mode. `qr` turns
+  the Clock button into *Scan to check in / out*, which opens `QrScanScreen` and
+  posts to `/attendance/qr`. `_punch()` branches to `_scanPunch()` at the top, so
+  the launcher shortcut follows automatically. Breaks stay a button.
+- **A scan is never queued.** A code is good for one scan and 30 seconds. The
+  offline queue (B2.4) still exists for button staff; for QR staff the server
+  refuses queued in/out punches with a per-punch `refused`.
+- **The scanner is `flutter_zxing`, not `mobile_scanner`.** `mobile_scanner` is
+  Google ML Kit on Android, which reports usage to Google — a third host, and
+  trap 13 says four documents promise two. ZXing decodes on the handset. Its
+  gallery button is **off**: the code proves presence, a gallery picture does not.
+  It needs the NDK and CMake at build time (both in the Android SDK here).
+- **Tests replace `QrScanScreen.open`** (a static function) because there is no
+  camera; nothing in `lib/` assigns it. Restore it in `tearDown`.
+- **`CAMERA` is now the ninth permission in the merged manifest** (trap 32).
+  iOS has `NSCameraUsageDescription`. Camera frames never leave the phone, so no
+  data type changed on the store forms — see the checklist §7 note, which also
+  says what to do if the first iOS upload asks for a photo-library string.
 
 ## The boundary between this repo and the other one
 

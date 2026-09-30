@@ -281,6 +281,21 @@ compares them, and a mismatch is a rejection.
 | Device or other IDs (push token) | Yes — see §8 | No — Google delivers it as a service provider | App functionality | Yes |
 | Advertising ID / analytics | No | No | — | — |
 
+> **Camera (A4.21) is not a data type on either form.** It scans the QR code on
+> the office screen and the one in the welcome email. Frames are decoded on the
+> handset by ZXing — deliberately not Google ML Kit, which would report usage
+> to Google and make a third host — and nothing is stored or sent except the
+> scanned text, which is a one-time code, not personal data. Both stores treat
+> on-device processing that never leaves the phone as *not collected*. The
+> Android `CAMERA` permission and the iOS `NSCameraUsageDescription` string
+> are the whole footprint.
+>
+> **Check on the first iOS build:** the scanner package links `image_picker`
+> (its gallery button is switched off). If App Store Connect answers the upload
+> with ITMS-90683 asking for `NSPhotoLibraryUsageDescription`, add one that
+> says the app does not read the photo library, rather than removing the
+> scanner.
+
 Answer **no** to tracking on both forms: there is no advertising SDK and no
 analytics. The app contacts two hosts — the employer's own server, and Google's
 Firebase Cloud Messaging to obtain a push token. FCM is a service provider

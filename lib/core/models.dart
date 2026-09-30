@@ -630,6 +630,7 @@ class TodayStatus {
     this.nextBreakAction = 'start',
     this.breakStartedAt,
     this.geofence,
+    this.method = 'button',
   });
 
   /// The day a punch made *now* counts against. On a shift crossing midnight
@@ -683,7 +684,18 @@ class TodayStatus {
   /// than no warning at all.
   final Geofence? geofence;
 
+  /// How the in/out button works today: `button` taps `/attendance/check`,
+  /// `qr` opens the scanner for the code on the office screen (A4.21).
+  ///
+  /// **Decided by the server**, like the fence above: it depends on the company
+  /// policy and the person's work mode, and WFH or hybrid staff stay on the
+  /// button whatever the policy says. Breaks are a button either way.
+  final String method;
+
   bool get willClockIn => nextAction == 'in';
+
+  /// Check in and out by scanning the office screen rather than tapping.
+  bool get scansQr => method == 'qr';
   bool get willStartBreak => nextBreakAction == 'start';
 
   factory TodayStatus.fromJson(Map<String, dynamic> j) => TodayStatus(
@@ -712,6 +724,8 @@ class TodayStatus {
         geofence: j['geofence'] is Map<String, dynamic>
             ? Geofence.fromJson(j['geofence'] as Map<String, dynamic>)
             : null,
+        // Absent on a server from before A4.21, which only has the button.
+        method: j['method'] == 'qr' ? 'qr' : 'button',
       );
 }
 

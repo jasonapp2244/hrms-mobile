@@ -547,6 +547,21 @@
     "punchBackFromBreak": "Back from break",
     "punchCheckIn": "Check in",
     "punchCheckOut": "Check out",
+    "punchScanIn": "Scan to check in",
+    "@punchScanIn": {
+        "description": "The clock button when the company asks office staff to scan the QR code on the office screen instead of tapping (A4.21)."
+    },
+    "punchScanOut": "Scan to check out",
+    "clockScanNeedsConnection": "No connection. Scanning needs the internet — connect to Wi-Fi or mobile data and scan again.",
+    "clockScanAgain": "That code has just changed. Scan the new one on the screen.",
+    "scanPointAtOffice": "Point your camera at the QR code on the office screen.",
+    "scanPointAtEmail": "Point your camera at the QR code in your welcome email.",
+    "scanWrongCode": "That is not the right QR code. Scan the one on the office screen, or the one in your welcome email to sign in.",
+    "scanCameraUnavailable": "The camera could not start. Allow KEMP to use the camera in your phone's settings, then try again.",
+    "loginWithQr": "Sign in with QR",
+    "@loginWithQr": {
+        "description": "Signs the phone in by scanning the one-time code in the welcome email HR sends."
+    },
     "correctionsTitle": "Corrections",
     "correctionsRaise": "Ask for a correction",
     "correctionsEmptyTitle": "No corrections asked for",

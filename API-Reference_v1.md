@@ -3,7 +3,7 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **44f29a1** (2026-09-29). If the API behaves differently from
+> Taken from `hr-backend` @ **d03164b** (2026-10-01). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
 >
 > The content is byte-identical to the backend's copy below this stamp; re-check with
@@ -145,6 +145,12 @@ change them — do not hard-code the numbers above into a client.
 | `device_not_trusted` | 403 | Login: the account is bound to a different handset (B1.6). HR releases it. |
 | `duplicate_scan` | 429 | Punch: within the cooldown of the last one. |
 | `no_office` | 422 | Punch: the company has no office set up. |
+| `qr_required` | 422 | Punch: this person checks in and out by scanning the office QR code (A4.21). Open the scanner; `/attendance/today` says so up front as `method: "qr"`. |
+| `qr_invalid` | 422 | QR punch: not an office code of this company, or its screen was switched off. |
+| `qr_expired` | 422 | QR punch: the code changed before it arrived. Scan the new one. |
+| `qr_already_used` | 422 | QR punch: somebody else scanned that code first. Scan the new one. |
+| `activation_invalid` | 422 | Sign-in with QR: no such code. |
+| `activation_expired` | 422 | Sign-in with QR: the code was used already, replaced by a newer email, or is over 7 days old. |
 | `wrong_password` | 422 | Password change: current password incorrect. |
 | `invalid_range` | 422 | `from` is after `to`. |
 | `range_too_large` | 422 | Date window exceeds the endpoint's maximum. |
@@ -180,8 +186,8 @@ IP, so limiting on that would have one busy person throttle their colleagues.
 | Limiter | Applies to | Limit |
 |---|---|---|
 | `api` | every endpoint | 120 / minute |
-| `login` | `POST /auth/login` | 5 / minute, per address **and** IP |
-| `punch` | `POST /attendance/check`, `POST /attendance/break`, `POST /attendance/sync` | 20 / minute |
+| `login` | `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/activate` | 5 / minute, per address **and** IP |
+| `punch` | `POST /attendance/check`, `POST /attendance/qr`, `POST /attendance/break`, `POST /attendance/sync` | 20 / minute |
 | `write` | every endpoint that creates or changes a record | 30 / minute |
 | `crash` | `POST /app/crashes` | 6 / minute, per IP — it is a public write |
 
@@ -401,6 +407,30 @@ call and must send the person back to the login screen.
 **Failures:** `validation_failed` (422) · `too_many_requests` (429, the `login`
 limiter — 5/minute)
 
+### `POST /auth/activate`
+
+Sign a phone in with the one-time code from the **welcome email** (A4.21). The
+email is sent when HR creates somebody's sign-in account, and again whenever HR
+presses *Send welcome email*. Unauthenticated, on the `login` limiter.
+
+| Field | Type | Notes |
+|---|---|---|
+| `code` | string, required | The scanned QR text, `KEMP1-ACT:<code>`, or the bare code. |
+| `device_name` | string, required | As for `/auth/login`. |
+| `device_id` | string, optional | As for `/auth/login` — device binding applies exactly as it does there. |
+| `platform` | string, optional | As for `/auth/login`. |
+
+Answers exactly like `/auth/login`: `token` and `user`.
+
+**The code signs in and does nothing else.** It is spent on first use, a newer
+email replaces it, and it expires after 7 days. It never records a punch — a
+code in an inbox can be forwarded, and attendance is proved only by the office
+screen's code (`POST /attendance/qr`).
+
+**Failures:** `activation_invalid` (422) · `activation_expired` (422) ·
+`account_disabled` (403) · `device_not_trusted` (403) · `validation_failed`
+(422) · `too_many_requests` (429)
+
 ### `GET /auth/me`
 
 The payload above, for a client restoring a session on launch. Call it at
@@ -503,7 +533,9 @@ bill of health nobody issued. The same three fields are accepted per punch on
 `type` is `in` or `out`. `status` is `ontime`, `late` or `early_leave`, measured
 against the shift rostered for that day.
 
-**Failures:** `duplicate_scan` (429, within the cooldown of the last punch) ·
+**Failures:** `qr_required` (422, this person scans the office code instead —
+see `method` on `/attendance/today`) · `duplicate_scan` (429, within the
+cooldown of the last punch) ·
 `outside_geofence` (422) · `no_office` (422) · `no_employee_record` (403) ·
 `too_many_requests` (429, the `punch` limiter)
 
@@ -515,6 +547,43 @@ on (A4.16, off by default). Its `message` names the distance, so show it rather
 than a generic failure — "move closer" is the one thing the person can act on.
 A punch that arrives with no coordinates is never fenced, so refusing location
 permission does not lock anybody out.
+
+### `POST /attendance/qr`
+
+Punch in or out by scanning the QR code on the office screen (A4.21). **Which
+one is still decided by the server**, exactly as for `/attendance/check`; the
+code adds one fact — that the person is standing at that screen.
+
+| Field | Type | Notes |
+|---|---|---|
+| `qr` | string, required | The scanned text, exactly as read: `KEMP1:<office_id>:<token>`. Refuse anything not starting `KEMP1:` on the handset rather than sending it. |
+| `latitude`, `longitude` | numeric, optional | As for `/attendance/check`. The geofence still applies when the company enforces one. |
+| `location_mocked`, `device_rooted`, `device_emulator` | boolean, optional | As for `/attendance/check`. |
+
+Answers exactly like `/attendance/check` (`punch`, `next_action`, `message`).
+`punch.source` is `qr`, and `punch.office` is the office **on the screen**,
+which may differ from the person's own — a cleaner covering another site is
+still at work.
+
+**Each code works once.** The first scan claims it; the screen shows a new one
+within about a second. A code nobody scans expires after 30 seconds. So a
+screenshot, a photo sent to somebody at home, or a second person scanning over a
+shoulder all fail.
+
+**Never queued offline.** The code is only worth anything while it is live, and
+only the server can say whether it still is. With no connection, tell the person
+to connect and scan again.
+
+Open to anybody, whatever `method` says, so a company can put a screen up and
+let staff try it before switching the button off.
+
+**Failures:** `qr_invalid` (422) · `qr_expired` (422) · `qr_already_used`
+(422) · `duplicate_scan` (429) · `outside_geofence` (422) · `no_employee_record`
+(403) · `validation_failed` (422) · `too_many_requests` (429, the `punch`
+limiter)
+
+`qr_expired` and `qr_already_used` mean the same thing to the person: scan
+again. Do not retry the same text — it can never succeed.
 
 ### `POST /attendance/sync`
 
@@ -623,6 +692,7 @@ Everything a home screen needs.
   "server_time": "2026-07-30T16:59:17-04:00",
   "timezone": "America/New_York",
   "next_action": "out",
+  "method": "button",
   "can_check": true,
   "on_break": false,
   "break_started_at": null,
@@ -645,6 +715,12 @@ Everything a home screen needs.
   02:00 sees the day their shift started, matching how the punch is filed.
 - `can_check` is `false` only while the duplicate cooldown is running. Grey the
   button rather than letting a tap fail.
+- `method` (A4.21) is how the in/out button works for this person **today**:
+  `button` posts to `/attendance/check`; `qr` opens the camera and posts the
+  scanned code to `/attendance/qr`, and `/attendance/check` and offline punches
+  are refused with `qr_required`. It is `qr` only for office staff at a company
+  that requires it — WFH and hybrid staff stay on `button`. Breaks are a button
+  either way. Decided here so the app never works the policy out itself.
 - `is_clocked_in` stays `true` **through a break** — the person has not gone
   home. Do not derive it from the last entry in `punches`: `break_end` is
   neither `in` nor `out`, and reading it as the end of the day would offer

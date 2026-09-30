@@ -48,6 +48,13 @@
 	     in Profile, which is why this says "if you turn on". -->
 	<key>NSFaceIDUsageDescription</key>
 	<string>If you turn on biometric unlock, Face ID is used to open the app on this phone instead of typing your password. The scan is checked by iOS and never leaves your device.</string>
+	<!-- QR check-in (A4.21). The camera reads the code on the office screen, and
+	     the welcome email's sign-in code. Same rule as the keys above: iOS kills
+	     the app rather than refusing when this is missing. Frames are decoded on
+	     the phone by ZXing and never sent anywhere, which is why no data type in
+	     PrivacyInfo.xcprivacy changes. -->
+	<key>NSCameraUsageDescription</key>
+	<string>The camera is used only to scan the QR code on your office screen when you check in or out, and the sign-in code in your welcome email. Nothing it sees is saved or sent.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

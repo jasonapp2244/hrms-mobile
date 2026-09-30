@@ -14,6 +14,7 @@ import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
 import 'notifications_screen.dart';
+import 'qr_scan_screen.dart';
 
 /// The home screen: one big button, and enough context around it that somebody
 /// can tell at a glance whether they are clocked in and for how long.
@@ -358,6 +359,11 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
   }
 
   Future<void> _punch() async {
+    // A4.21. Office staff at a company that asked for it scan the office
+    // screen instead of tapping. The server says which, per person, on the day
+    // — the button and the launcher shortcut both land here, so both follow.
+    if (_today?.scansQr == true) return _scanPunch();
+
     // Read before the first await: neither the palette nor the strings can
     // change mid-call, and reaching for a BuildContext after one is the lint
     // this avoids.
@@ -415,11 +421,80 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
         // and delivered when there is something to deliver it over — rather
         // than lost, or silently recorded hours later at the wrong time.
         await _queuePunch();
+      } else if (e.error == 'qr_required') {
+        // The policy changed under a screen loaded before it did. The reload
+        // brings `method: qr`, and the button turns into the scanner.
+        _showResult(e.text(t), colors.late);
+        await _load();
       } else {
         _showResult(
           e.error == 'no_office' ? t.clockNoOffice : e.text(t),
           Theme.of(context).colorScheme.error,
         );
+      }
+    } finally {
+      if (mounted) setState(() => _punching = false);
+    }
+  }
+
+  /// Punch by scanning the code on the office screen (A4.21).
+  ///
+  /// The server still decides in or out, exactly as for the button; the code
+  /// adds only that the person is standing at the screen.
+  ///
+  /// **Never queued.** A code is good for one scan and thirty seconds, so one
+  /// held until the signal came back would be refused on arrival — and a
+  /// queue that promised otherwise would be lying about somebody's hours.
+  Future<void> _scanPunch() async {
+    final colors = AppColors.of(context);
+    final t = context.t;
+    final session = SessionScope.read(context);
+    final error = Theme.of(context).colorScheme.error;
+
+    if (_punching) return;
+
+    final scanned = await QrScanScreen.open(
+      context,
+      title: _today?.willClockIn == false ? t.punchScanOut : t.punchScanIn,
+      prefix: officeQrPrefix,
+    );
+
+    if (scanned == null || !mounted) return;
+    setState(() => _punching = true);
+
+    try {
+      final body = await session.locator.punchBody();
+
+      // B2.5, as for the button: say it here when the answer is already known.
+      final outside = _outsideFence(body);
+      if (outside != null) {
+        _showResult(outside, colors.late);
+        return;
+      }
+
+      final res = await session.api.post('/attendance/qr', body: {...body, 'qr': scanned});
+      final punch = Punch.fromJson(res['punch'] as Map<String, dynamic>);
+
+      if (!mounted) return;
+      _showResult(
+        '${res['message']}',
+        punch.status == 'late' ? colors.late : colors.present,
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      if (e.isDuplicateScan) {
+        _showResult(t.clockAlreadyRecorded, colors.neutral);
+        await _load();
+      } else if (e.isNetworkFailure) {
+        _showResult(t.clockScanNeedsConnection, error);
+      } else if (e.error == 'qr_expired' || e.error == 'qr_already_used') {
+        // Somebody scanned first, or the code turned over in the second it
+        // took to send. Nothing is wrong; the screen already shows the next.
+        _showResult(t.clockScanAgain, colors.late);
+      } else {
+        _showResult(e.text(t), error);
       }
     } finally {
       if (mounted) setState(() => _punching = false);
@@ -929,10 +1004,17 @@ class _PunchButton extends StatelessWidget {
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(clockingIn ? Icons.login : Icons.logout, size: 34),
+                  Icon(
+                    today.scansQr
+                        ? Icons.qr_code_scanner
+                        : (clockingIn ? Icons.login : Icons.logout),
+                    size: 34,
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    clockingIn ? t.punchCheckIn : t.punchCheckOut,
+                    today.scansQr
+                        ? (clockingIn ? t.punchScanIn : t.punchScanOut)
+                        : (clockingIn ? t.punchCheckIn : t.punchCheckOut),
                     style: const TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w700,

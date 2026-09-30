@@ -48,6 +48,16 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove"/>
 
+    <!-- QR check-in (A4.21). The scanner (flutter_zxing, through the camera
+         plugin) needs CAMERA and nothing else. camera_android_camerax also
+         merges RECORD_AUDIO and WRITE_EXTERNAL_STORAGE for recording video and
+         saving pictures; the scanner does neither — its controller is opened
+         with enableAudio: false and it keeps no frame — so both are removed.
+         A microphone permission on an attendance app is exactly the question a
+         reviewer asks and nobody here could answer. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>
+
     <!-- Both of these are REQUIRED declarations that undo a default, and
          leaving them out is a Play Store distribution bug rather than a
          runtime one — which is why it survived every test.

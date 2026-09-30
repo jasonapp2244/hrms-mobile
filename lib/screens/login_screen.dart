@@ -5,6 +5,7 @@ import '../core/l10n.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import 'forgot_password_screen.dart';
+import 'qr_scan_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -66,6 +67,40 @@ class _LoginScreenState extends State<LoginScreen> {
         };
         _emailError = e.fieldError('email');
         _passwordError = e.fieldError('password');
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sign in with the one-time code from the welcome email (A4.21).
+  ///
+  /// The same session at the end as the form gives; the code stands in for
+  /// the password and nothing else.
+  Future<void> _scanToSignIn() async {
+    final t = context.t;
+    final session = SessionScope.read(context);
+
+    setState(() {
+      _error = null;
+      _emailError = null;
+      _passwordError = null;
+    });
+
+    final scanned = await QrScanScreen.open(context, title: t.loginWithQr, prefix: activationQrPrefix);
+    if (scanned == null || !mounted) return;
+
+    setState(() => _busy = true);
+
+    try {
+      await session.activate(scanned);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = switch (e.error) {
+          'account_disabled' => t.loginAccountDisabled,
+          _ => e.text(t),
+        };
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -163,6 +198,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             )
                           : Text(t.loginSubmit),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // A4.21. For somebody holding the welcome email and no
+                    // password yet — the ordinary first morning.
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _scanToSignIn,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: Text(t.loginWithQr),
                     ),
                     const SizedBox(height: 20),
 
