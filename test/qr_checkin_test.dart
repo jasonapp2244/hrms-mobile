@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -97,6 +98,7 @@ void main() {
     WidgetTester tester, {
     required String method,
     http.Response Function()? onScan,
+    PunchLocator locator = const PunchLocator(source: NoLocationSource()),
   }) async {
     late Session session;
     final sent = <http.Request>[];
@@ -119,7 +121,7 @@ void main() {
               return onScan?.call() ??
                   json({
                     'ok': true,
-                    'punch': {'id': 9, 'type': 'in', 'status': 'ontime', 'scanned_at': '2026-09-30T08:57:00-04:00', 'time': '08:57 AM'},
+                    'punch': {'id': 9, 'type': 'in', 'status': 'ontime', 'scanned_at': '2026-09-30T08:57:00-04:00', 'time': '08:57 AM', 'office': 'Head Office'},
                     'next_action': 'out',
                     'message': 'You clocked IN at 08:57 AM.',
                   });
@@ -137,7 +139,7 @@ void main() {
         ),
         cache: store,
         queue: queue,
-        locator: const PunchLocator(source: NoLocationSource()),
+        locator: locator,
       );
 
       await session.restore();
@@ -161,6 +163,8 @@ void main() {
     ));
     await settle(tester);
   }
+
+  Finder inPopup(String text) => find.descendant(of: find.byType(AlertDialog), matching: find.text(text));
 
   Iterable<String> paths(List<http.Request> sent) => sent.map((r) => r.url.path.split('/api/v1').last);
 
@@ -186,7 +190,38 @@ void main() {
 
     final scan = sent.firstWhere((r) => r.url.path.endsWith('/attendance/qr'));
     expect(jsonDecode(scan.body)['qr'], 'KEMP1:4:abc123');
-    expect(find.text('You clocked IN at 08:57 AM.'), findsOneWidget);
+
+    // A popup, not a snackbar: what was recorded, when and where.
+    expect(inPopup('Checked in'), findsOneWidget);
+    expect(inPopup('08:57 AM'), findsOneWidget);
+    expect(inPopup('Head Office'), findsOneWidget);
+    expect(find.text('Checking you in…'), findsNothing, reason: 'the loader is down once the answer is up');
+
+    await tester.tap(find.text('Done'));
+    await settle(tester);
+    expect(find.byType(AlertDialog), findsNothing);
+
+    session.dispose();
+  });
+
+  testWidgets('a late punch says so in the popup', (tester) async {
+    scannerReads('KEMP1:4:abc123');
+    final (session, _) = await signedIn(
+      tester,
+      method: 'qr',
+      onScan: () => json({
+        'ok': true,
+        'punch': {'id': 9, 'type': 'in', 'status': 'late', 'scanned_at': '2026-09-30T09:20:00-04:00', 'time': '09:20 AM', 'office': 'Head Office'},
+        'next_action': 'out',
+        'message': 'You clocked IN at 09:20 AM.',
+      }),
+    );
+    await pumpClock(tester, session);
+
+    await tester.tap(find.text('Scan to check in'));
+    await settle(tester);
+
+    expect(inPopup('late'), findsOneWidget);
 
     session.dispose();
   });
@@ -220,7 +255,7 @@ void main() {
   });
 
   testWidgets('a code somebody else used first asks for another scan', (tester) async {
-    scannerReads('KEMP1:4:abc123');
+    final asked = scannerReads('KEMP1:4:abc123');
     final (session, _) = await signedIn(
       tester,
       method: 'qr',
@@ -233,6 +268,85 @@ void main() {
 
     expect(find.text('That code has just changed. Scan the new one on the screen.'), findsOneWidget);
 
+    // One tap back to the camera, rather than hunting for the button again.
+    await tester.tap(find.text('Scan again'));
+    await settle(tester);
+    expect(asked, hasLength(2));
+
+    session.dispose();
+  });
+
+  testWidgets('a server fault offers another scan and shows no server detail', (tester) async {
+    final asked = scannerReads('KEMP1:4:abc123');
+    final (session, _) = await signedIn(
+      tester,
+      method: 'qr',
+      onScan: () => json({'ok': false, 'error': 'server_error', 'message': 'Something went wrong on our side.'}, 500),
+    );
+    await pumpClock(tester, session);
+
+    await tester.tap(find.text('Scan to check in'));
+    await settle(tester);
+
+    expect(inPopup('Not recorded'), findsOneWidget);
+    expect(find.textContaining('SQLSTATE'), findsNothing);
+
+    await tester.tap(find.text('Scan again'));
+    await settle(tester);
+    expect(asked, hasLength(2));
+
+    session.dispose();
+  });
+
+  // Found on a real handset indoors: the code was read, then the app waited on
+  // a GPS fix that never came, and by the time it sent the code the screen had
+  // moved on — "That code has just changed" for somebody who did nothing wrong.
+  testWidgets('the fix is sought while the camera is up, not after the read', (tester) async {
+    final gps = _SlowFix();
+    var askedBeforeRead = false;
+    QrScanScreen.open = (context, {required title, required prefix}) async {
+      askedBeforeRead = gps.asked > 0;
+      return 'KEMP1:4:abc123';
+    };
+    final (session, sent) = await signedIn(tester, method: 'qr', locator: PunchLocator(source: gps));
+    await pumpClock(tester, session);
+
+    await tester.tap(find.text('Scan to check in'));
+    await tester.pump();
+
+    expect(askedBeforeRead, isTrue);
+
+    gps.answer(const Coordinates(latitude: 40.7, longitude: -74.0));
+    await settle(tester);
+
+    final scan = sent.firstWhere((r) => r.url.path.endsWith('/attendance/qr'));
+    expect(jsonDecode(scan.body)['latitude'], 40.7);
+
+    session.dispose();
+  });
+
+  testWidgets('a fix that is not coming does not outlive the code', (tester) async {
+    scannerReads('KEMP1:4:abc123');
+    final gps = _SlowFix();
+    final (session, sent) = await signedIn(tester, method: 'qr', locator: PunchLocator(source: gps));
+    await pumpClock(tester, session);
+
+    await tester.tap(find.text('Scan to check in'));
+    await settle(tester);
+    expect(paths(sent), isNot(contains('/attendance/qr')), reason: 'still inside the short wait');
+    expect(find.text('Checking you in…'), findsOneWidget, reason: 'never a still screen after the camera closes');
+
+    // Less than the eight seconds the office screen leaves on a code it shows.
+    await tester.pump(scanLocationWait);
+    await settle(tester);
+
+    final scan = sent.firstWhere((r) => r.url.path.endsWith('/attendance/qr'));
+    expect(jsonDecode(scan.body)['qr'], 'KEMP1:4:abc123');
+    expect(jsonDecode(scan.body), isNot(contains('latitude')));
+    expect(inPopup('Checked in'), findsOneWidget);
+
+    gps.answer(null);
+    await settle(tester);
     session.dispose();
   });
 
@@ -333,4 +447,20 @@ void main() {
 
     session.dispose();
   });
+}
+
+/// A GPS that answers only when the test says so — indoors, in other words.
+class _SlowFix implements LocationSource {
+  final _fix = Completer<Coordinates?>();
+  int asked = 0;
+
+  void answer(Coordinates? fix) {
+    if (!_fix.isCompleted) _fix.complete(fix);
+  }
+
+  @override
+  Future<Coordinates?> currentPosition() {
+    asked++;
+    return _fix.future;
+  }
 }

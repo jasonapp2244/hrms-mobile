@@ -558,6 +558,11 @@
     "scanPointAtEmail": "Point your camera at the QR code in your welcome email.",
     "scanWrongCode": "That is not the right QR code. Scan the one on the office screen, or the one in your welcome email to sign in.",
     "scanCameraUnavailable": "The camera could not start. Allow KEMP to use the camera in your phone's settings, then try again.",
+    "scanRecordingIn": "Checking you in…",
+    "scanRecordingOut": "Checking you out…",
+    "scanSigningIn": "Signing you in…",
+    "scanNotRecorded": "Not recorded",
+    "scanAgain": "Scan again",
     "loginWithQr": "Sign in with QR",
     "@loginWithQr": {
         "description": "Signs the phone in by scanning the one-time code in the welcome email HR sends."

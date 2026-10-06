@@ -4,6 +4,7 @@ import '../core/api_client.dart';
 import '../core/l10n.dart';
 import '../core/theme.dart';
 import '../main.dart';
+import '../widgets/scan_dialogs.dart';
 import 'forgot_password_screen.dart';
 import 'qr_scan_screen.dart';
 
@@ -91,6 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (scanned == null || !mounted) return;
 
     setState(() => _busy = true);
+    final closeBusy = showScanBusy(context, t.scanSigningIn);
 
     try {
       await session.activate(scanned);
@@ -103,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
         };
       });
     } finally {
+      closeBusy();
       if (mounted) setState(() => _busy = false);
     }
   }

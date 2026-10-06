@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_zxing/flutter_zxing.dart';
 
 import '../core/l10n.dart';
@@ -68,6 +69,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
     }
 
     _done = true;
+    // Felt before anything is seen: the person can lower the phone now.
+    HapticFeedback.mediumImpact();
     Navigator.of(context).pop(text);
   }
 
@@ -86,11 +89,21 @@ class _QrScanScreenState extends State<QrScanScreen> {
                   child: ReaderWidget(
                     onScan: _onScan,
                     codeFormat: Format.qrCode,
+                    // Kept: a code photographed off a monitor carries moiré
+                    // and glare, which the faster pass misses frame after frame.
                     tryHarder: true,
+                    // A QR's finder patterns already read it at any angle; the
+                    // rotated pass is for barcodes and only doubles the work.
+                    tryRotate: false,
+                    // Decodes a smaller copy of a large frame first — quicker,
+                    // and no loss on a code that fills the frame.
+                    tryDownscale: true,
                     showGallery: false,
                     showToggleCamera: false,
                     cropPercent: 0.7,
-                    scanDelay: const Duration(milliseconds: 250),
+                    // The pause between frames, not the decode. At 250ms a code
+                    // held steady still waited a quarter-second per miss.
+                    scanDelay: const Duration(milliseconds: 50),
                     onControllerCreated: (_, error) {
                       if (error != null && mounted) setState(() => _cameraFailed = true);
                     },

@@ -13,8 +13,19 @@ import '../core/tab_visibility.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
+import '../widgets/scan_dialogs.dart';
 import 'notifications_screen.dart';
 import 'qr_scan_screen.dart';
+
+/// How long a scanned office code waits for the location once it has been read.
+///
+/// The office screen swaps a code while it still has eight seconds to live
+/// (`QrAttendanceService::REFRESH_MARGIN_SECONDS`), so this plus the request has
+/// to fit inside that. The fix is already being sought while the camera is up;
+/// this is only the remainder. Past it the code goes without coordinates, which
+/// costs nothing here: the code itself says which office the person is
+/// standing in, and location is a record, not a gate.
+const scanLocationWait = Duration(seconds: 3);
 
 /// The home screen: one big button, and enough context around it that somebody
 /// can tell at a glance whether they are clocked in and for how long.
@@ -453,6 +464,12 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
 
     if (_punching) return;
 
+    // Started before the camera opens, not after the read. A code lives for
+    // seconds and an indoor fix can take longer than that, so waiting for the
+    // fix once the code was in hand let it expire on the way — seen on a real
+    // handset. Aiming at the screen is time the satellites can use.
+    final location = session.locator.punchBody();
+
     final scanned = await QrScanScreen.open(
       context,
       title: _today?.willClockIn == false ? t.punchScanOut : t.punchScanIn,
@@ -462,43 +479,64 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
     if (scanned == null || !mounted) return;
     setState(() => _punching = true);
 
+    // Up before the first await, so the camera closing is never followed by a
+    // still screen — a still screen is where people scan a second time.
+    final closeBusy = showScanBusy(
+      context,
+      _today?.willClockIn == false ? t.scanRecordingOut : t.scanRecordingIn,
+    );
+
+    // What to say once the spinner is down; null after a punch.
+    ({String message, Color color, bool rescan})? refusal;
+
     try {
-      final body = await session.locator.punchBody();
+      final body = await location.timeout(scanLocationWait, onTimeout: () => const <String, dynamic>{});
 
       // B2.5, as for the button: say it here when the answer is already known.
       final outside = _outsideFence(body);
       if (outside != null) {
-        _showResult(outside, colors.late);
+        refusal = (message: outside, color: colors.late, rescan: false);
+      } else {
+        final res = await session.api.post('/attendance/qr', body: {...body, 'qr': scanned});
+        final punch = Punch.fromJson(res['punch'] as Map<String, dynamic>);
+
+        closeBusy();
+        if (!mounted) return;
+        // Not awaited: the card behind the popup is already right by the time
+        // the person taps Done.
+        unawaited(_load());
+        await showPunchRecorded(context, punch);
         return;
       }
-
-      final res = await session.api.post('/attendance/qr', body: {...body, 'qr': scanned});
-      final punch = Punch.fromJson(res['punch'] as Map<String, dynamic>);
-
-      if (!mounted) return;
-      _showResult(
-        '${res['message']}',
-        punch.status == 'late' ? colors.late : colors.present,
-      );
-      await _load();
     } on ApiException catch (e) {
-      if (!mounted) return;
-
       if (e.isDuplicateScan) {
-        _showResult(t.clockAlreadyRecorded, colors.neutral);
-        await _load();
+        // The punch they wanted is on record; they scanned twice.
+        refusal = (message: t.clockAlreadyRecorded, color: colors.neutral, rescan: false);
+        if (mounted) unawaited(_load());
       } else if (e.isNetworkFailure) {
-        _showResult(t.clockScanNeedsConnection, error);
+        refusal = (message: t.clockScanNeedsConnection, color: error, rescan: true);
       } else if (e.error == 'qr_expired' || e.error == 'qr_already_used') {
         // Somebody scanned first, or the code turned over in the second it
         // took to send. Nothing is wrong; the screen already shows the next.
-        _showResult(t.clockScanAgain, colors.late);
+        refusal = (message: t.clockScanAgain, color: colors.late, rescan: true);
       } else {
-        _showResult(e.text(t), error);
+        // A server fault is usually over by the next scan — a busy database,
+        // a restart — and the code on the screen is fresh again by then.
+        refusal = (message: e.text(t), color: error, rescan: (e.statusCode ?? 0) >= 500);
       }
     } finally {
+      closeBusy();
       if (mounted) setState(() => _punching = false);
     }
+
+    if (!mounted) return;
+    final again = await showScanRefused(
+      context,
+      message: refusal.message,
+      color: refusal.color,
+      offerRescan: refusal.rescan,
+    );
+    if (again && mounted) await _scanPunch();
   }
 
   /// Keep a punch that could not be sent.
