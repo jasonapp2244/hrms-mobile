@@ -179,6 +179,24 @@ void main() {
       s.dispose();
     });
 
+    test('signing in asks for the count too, not only a launch', () async {
+      // Found on the handset: Emily signed in with a decision and a hand-off
+      // waiting, and the bell sat empty until the app was restarted, because
+      // only restore() ever asked.
+      FlutterSecureStorage.setMockInitialValues({});
+      final fake = api(unread: 2);
+      final s = session(fake.client);
+
+      await s.login(email: 'james@acme.test', password: 'password');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(fake.calls, contains('GET /api/v1/notifications'));
+      expect(s.unreadNotifications.value, 2);
+
+      s.dispose();
+    });
+
     test('no signal leaves the last count alone rather than zeroing it',
         () async {
       // A badge is not worth an error, and a handset on a site with no

@@ -28,19 +28,20 @@ Two consequences for everything below:
 |---|---|
 | Privacy policy at a public URL, no login | `GET /privacy` — `hrms/resources/views/legal/privacy.blade.php` |
 | Account-deletion route, no login | `GET /account-deletion` — `hrms/resources/views/legal/deletion.blade.php` |
-| Both reachable from inside the app | Profile screen → Privacy policy / Delete my account |
+| Both reachable from inside the app | Profile screen → Privacy policy / Delete my account. The privacy policy is also on the login screen (1.0.6), so a reviewer reaches it without an account |
 | Real launcher icon, all densities | `mobile/android/.../mipmap-*`, `mobile/ios/.../AppIcon.appiconset` |
 | Adaptive icon (Android 8+) | `mipmap-anydpi-v26/ic_launcher.xml` + `values/colors.xml` |
 | iOS icon with no alpha channel | `remove_alpha_ios: true` in `pubspec.yaml` |
 | App Store icon, 1024×1024 | `mobile/store/app-store-icon-1024.png` — RGB, no alpha channel |
 | Release signing separate from the debug key | `android/app/build.gradle.kts` reads `key.properties` |
-| Permissions declared and used | `INTERNET`, `POST_NOTIFICATIONS`, `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` (B2.3), `USE_BIOMETRIC` (B1.3). No `<uses-feature>` for the biometric sensor, and location's implied ones are declared `required="false"` — in both cases requiring the hardware would hide the app from every device without it |
-| iOS usage strings for both prompts | `NSLocationWhenInUseUsageDescription`, `NSFaceIDUsageDescription`. Missing either is a termination on a real device, not a refusal |
+| Permissions declared and used | `INTERNET`, `POST_NOTIFICATIONS`, `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` (B2.3), `USE_BIOMETRIC` (B1.3), and `CAMERA` (QR check-in, A4.21, merged from the camera plugin and asked for at the moment of a scan). The merged manifest also carries `USE_FINGERPRINT`, `ACCESS_NETWORK_STATE` and `WAKE_LOCK` from plugins — all normal, none prompts. Storage, media and `RECORD_AUDIO` are removed explicitly; see `CLAUDE.md` trap 32 for the exact list and how to re-check it. No `<uses-feature>` for the biometric sensor, and location's implied ones are declared `required="false"` — in both cases requiring the hardware would hide the app from every device without it |
+| iOS usage strings | `NSLocationWhenInUseUsageDescription`, `NSFaceIDUsageDescription`, `NSCameraUsageDescription` — missing one is a termination on a real device, not a refusal. Plus `NSPhotoLibraryUsageDescription` (file_picker) and `NSMicrophoneUsageDescription` (the camera plugin), which the app never asks for but whose APIs are linked: without them the upload is refused with ITMS-90683 |
+| iOS minimum version | 15.0 (`IPHONEOS_DEPLOYMENT_TARGET`, all three build configurations, and `AppFrameworkInfo.plist`). The Firebase plugins require it; 13.0 fails `pod install` on the Mac |
 | Biometric data leaves nothing to declare | The check is made by the OS; the app is told yes or no and stores only a per-handset on/off flag. Neither store's data form has a row to fill in for it |
 | Android 11 package visibility for links | `<queries>` https VIEW intent |
 | Auth token excluded from backup and transfer | `xml/data_extraction_rules.xml`, `xml/backup_rules.xml` |
 | Export-compliance answer | `ITSAppUsesNonExemptEncryption = false` in `Info.plist` |
-| Apple privacy manifest — contents | `ios/Runner/PrivacyInfo.xcprivacy`. Tracking false, precise location, crash data, name, email and user id all declared; `NSPrivacyAccessedAPITypes` is empty because the app's own code uses no required-reason API and the plugins that do ship their own manifests |
+| Apple privacy manifest — contents | `ios/Runner/PrivacyInfo.xcprivacy`. Tracking false, precise location, crash data, name, email and user id all declared; `NSPrivacyAccessedAPITypes` declares the file-timestamp category (C617.1) on behalf of `safe_device`, which calls `attributesOfItemAtPath:` and ships no manifest of its own. Every other plugin that touches a required-reason API ships its own manifest, which Xcode merges |
 | Cleartext traffic blocked in release | `ApiClient.assertSecureBaseUrl()` refuses a non-https release build |
 | A way to retire a shipped build | `GET /app/status` (B6.6) — a server-side minimum version and a maintenance flag, both empty/off by default. Set `MOBILE_STORE_URL_ANDROID` / `MOBILE_STORE_URL_IOS` to the real listings once they exist, or the update screen has nowhere to send anybody and the gate declines to fire |
 | English and Spanish in the app | `mobile/lib/l10n/app_en.arb` and `app_es.arb` (B6.2). Every string, including the OS's own biometric prompt and the name in the task switcher. The app follows the phone's language by default and offers a picker on the Profile screen |
@@ -219,8 +220,10 @@ be updated under the same listing.
 
 ### 5. Build against the real server
 
-The default API base is the emulator's view of a development machine. A release
-build must override it, and will refuse to start if it does not:
+The default API base is the live HTTPS server, `https://hrams.devonlinetestserver.com/api/v1`
+(`ApiClient.baseUrl`), so a plain build needs no flag. Pass `API_BASE` only to
+point a build somewhere else — a release build refuses to start if that is not
+https. Naming the server explicitly is still the safer habit for a store build:
 
 ```bash
 flutter build appbundle --dart-define=API_BASE=https://hrams.devonlinetestserver.com/api/v1
@@ -290,11 +293,11 @@ compares them, and a mismatch is a rejection.
 > Android `CAMERA` permission and the iOS `NSCameraUsageDescription` string
 > are the whole footprint.
 >
-> **Check on the first iOS build:** the scanner package links `image_picker`
-> (its gallery button is switched off). If App Store Connect answers the upload
-> with ITMS-90683 asking for `NSPhotoLibraryUsageDescription`, add one that
-> says the app does not read the photo library, rather than removing the
-> scanner.
+> **Photo library and microphone strings are already in `Info.plist` (1.0.6).**
+> `file_picker` and the scanner's `image_picker` link the photo library, and
+> the camera plugin links the microphone; App Store Connect refuses an upload
+> with ITMS-90683 when a linked API has no purpose string. Neither is ever
+> prompted for — the strings say so.
 
 Answer **no** to tracking on both forms: there is no advertising SDK and no
 analytics. The app contacts two hosts — the employer's own server, and Google's
@@ -420,3 +423,20 @@ release sits unsubmittable.
 - **`debugPrint` calls are left in.** They are diagnostics on paths that
   deliberately swallow their errors — a failed push registration, an unreadable
   preference — and none of them prints anything about a person.
+
+
+## iOS push — needs a Mac, not done yet
+
+Push works on Android today. On iOS it needs three things that can only be done
+in Xcode and the Apple Developer account:
+
+1. **Push Notifications** capability (and Background Modes → Remote
+   notifications) on the Runner target.
+2. `ios/Runner/GoogleService-Info.plist` from the Firebase console, added to the
+   Runner target.
+3. An **APNs authentication key** (.p8) uploaded to Firebase → Project settings
+   → Cloud Messaging.
+
+Until then an iOS build ships with push off: the app works, registration fails
+quietly (it is designed to — see §8), and nobody on iOS receives notifications.
+See `Push-Notifications_Setup.md` for the full steps.

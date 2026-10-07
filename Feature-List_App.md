@@ -268,3 +268,31 @@ reads the clock, and the server sends notification times on the company's
 clock with the offset. Everything else was already anchored to the company:
 times arrive pre-formatted, "today" comes from `server_time`/`today`, and the
 device clock is used only for elapsed-time measurements. 1.0.4.*
+
+---
+
+*2026-10-08, store-readiness pass and a full role walk-through on a Galaxy A07
+against the live server (1.0.6+7).*
+
+- *Store fixes:*
+  - *iOS minimum raised to 15.0. The Firebase plugins require it.*
+  - *Photo-library and microphone purpose strings added. A linked API with no
+    purpose string gets the upload refused with ITMS-90683.*
+  - *The privacy manifest now declares the file-timestamp API that
+    `safe_device` uses. That plugin ships no manifest of its own.*
+- *The privacy policy is now also on the login screen, so a reviewer with no
+  account can reach it.*
+- *One fault found on the phone: the notification badge was fetched only when a
+  session restored at launch, never after signing in. Someone signing in with
+  decisions waiting saw an empty bell until the next restart. Fixed in
+  `Session._signedIn`; `test/notifications_test.dart` pins it.*
+- *Walked with no fault:*
+  - *Emily (employee): all five tabs, both legal links, Spanish, leave apply and
+    withdraw, offline cache and recovery.*
+  - *Jessica (manager): the inbox and the In today, Roster and Off tabs, and
+    the first-stage approval.*
+  - *Hana (HR): the final decision, People, person detail.*
+  - *Admin: the no-employee-record state on every tab.*
+  - *The QR scanner and its camera prompt.*
+- *Clock-in punches were not made on the live server, to keep the demo
+  attendance clean.*

@@ -55,6 +55,16 @@
 	     PrivacyInfo.xcprivacy changes. -->
 	<key>NSCameraUsageDescription</key>
 	<string>The camera is used only to scan the QR code on your office screen when you check in or out, and the sign-in code in your welcome email. Nothing it sees is saved or sent.</string>
+	<!-- Not features of their own: file_picker (leave attachments) links the
+	     photo library APIs and the camera plugin behind the QR scanner links the
+	     microphone (it can record video). App Store Connect rejects an upload with
+	     ITMS-90683 when a linked API has no purpose string, used or not. Android
+	     removes the matching RECORD_AUDIO for the same reason (see the manifest).
+	     The wording says what actually happens, which is what review checks. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>When you attach a document to a leave request, such as a doctor's note, you can choose a photo of it from your library. Only the photo you pick is uploaded.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The app never records sound. The camera used to scan QR codes is opened with audio switched off, so you will not be asked for the microphone.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

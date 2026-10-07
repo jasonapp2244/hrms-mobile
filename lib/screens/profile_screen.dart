@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api_client.dart';
 import '../core/biometrics.dart';
@@ -9,6 +8,7 @@ import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/async_view.dart';
 import '../widgets/sheet_padding.dart';
+import '../widgets/site_link.dart';
 import 'directory_screen.dart';
 import 'documents_screen.dart';
 
@@ -439,31 +439,12 @@ class _BiometricLockTileState extends State<_BiometricLockTile> {
 }
 
 /// A row that opens one of the server's public legal pages in the browser.
-///
-/// The host comes from the API base URL, so a build pointed at a staging server
-/// shows that server's policy rather than silently linking to production.
 class _LinkRow extends StatelessWidget {
   const _LinkRow({required this.icon, required this.label, required this.path});
 
   final IconData icon;
   final String label;
   final String path;
-
-  Future<void> _open(BuildContext context) async {
-    final url = Uri.parse('${ApiClient.siteUrl}$path');
-
-    // Outside the app rather than in a web view: a policy shown in a frame the
-    // app controls is worth less than one the person can see the address of.
-    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-
-    if (!opened && context.mounted) {
-      // Failing silently would look identical to a page that opened behind the
-      // app, so say what could not be reached and where it lives.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.t.profileCouldNotOpen('$url'))),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -478,7 +459,7 @@ class _LinkRow extends StatelessWidget {
         size: 17,
         color: theme.colorScheme.outline,
       ),
-      onTap: () => _open(context),
+      onTap: () => SiteLink.open(context, path),
     );
   }
 }

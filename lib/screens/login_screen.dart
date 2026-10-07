@@ -5,6 +5,7 @@ import '../core/l10n.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../widgets/scan_dialogs.dart';
+import '../widgets/site_link.dart';
 import 'forgot_password_screen.dart';
 import 'qr_scan_screen.dart';
 
@@ -227,6 +228,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                       child: Text(t.loginForgot),
+                    ),
+                    // Google Play and Apple both want the policy reachable
+                    // before an account exists — a reviewer, or somebody
+                    // deciding whether to sign in at all, never gets to Profile.
+                    TextButton(
+                      onPressed: () => SiteLink.open(context, '/privacy'),
+                      child: Text(t.profilePrivacy),
                     ),
                     const SizedBox(height: 8),
                     Text(

@@ -443,6 +443,11 @@ class Session extends ChangeNotifier {
     await _cacheProfile(res['user']);
     notifyListeners();
 
+    // The badge, as [restore] does at launch. Only restore asked before, so
+    // somebody signing in with decisions waiting saw an empty bell until the
+    // app was next started — the first morning, exactly when it matters.
+    unawaited(refreshUnread());
+
     // After the user is published, not before: the permission prompt should
     // appear over the app rather than over the login screen.
     await _startPush();

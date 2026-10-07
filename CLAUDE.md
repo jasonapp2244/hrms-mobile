@@ -542,8 +542,21 @@ grep -oE 'android:name="android\.permission\.[A-Z_]+"' \
   build/app/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml | sort -u
 ```
 
-The list should be the eight in the main manifest plus `CAMERA` (A4.21), and
-nothing else.
+As of 1.0.6 the list is exactly nine: the five the main manifest declares
+(`INTERNET`, `POST_NOTIFICATIONS`, `ACCESS_FINE_LOCATION`,
+`ACCESS_COARSE_LOCATION`, `USE_BIOMETRIC`) plus four merged from plugins —
+`CAMERA` (QR check-in, A4.21), `USE_FINGERPRINT` (local_auth, for Android 8–9),
+and `ACCESS_NETWORK_STATE` and `WAKE_LOCK` (Firebase Messaging). None of the
+four is a dangerous permission except `CAMERA`, which is asked for at the
+moment of a scan. The six the main manifest *removes* (`READ_EXTERNAL_STORAGE`,
+`WRITE_EXTERNAL_STORAGE`, the three `READ_MEDIA_*`, `RECORD_AUDIO`) must not
+appear. Anything else is new and needs a reason before it ships.
+
+iOS has the same trap in another form: a plugin that *links* an API needs its
+purpose string even when the app never calls it, or App Store Connect refuses
+the upload with ITMS-90683. That is why `Info.plist` carries
+`NSPhotoLibraryUsageDescription` (file_picker) and
+`NSMicrophoneUsageDescription` (the camera plugin behind the scanner).
 
 ### 33. `useSafeArea: true` does not cover the bottom of a bottom sheet
 

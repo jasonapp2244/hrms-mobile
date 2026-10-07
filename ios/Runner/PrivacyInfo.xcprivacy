@@ -37,9 +37,16 @@
   without declaring it is the single most common cause of an enforcement
   removal, and nothing about it fails at build time.
 
-  NSPrivacyAccessedAPITypes is empty: the app's own code uses no required-reason
-  API. The plugins that do (Firebase, path_provider) ship their own manifests,
-  which Xcode merges at build time.
+  NSPrivacyAccessedAPITypes: the app's own code uses no required-reason API,
+  and most plugins that do ship their own manifest, which Xcode merges. One does
+  not: safe_device (device integrity) calls -[NSFileManager
+  attributesOfItemAtPath:], which Apple files under the file-timestamp category,
+  to see whether a jailbreak path is a symlink. It reads only NSFileType, never a
+  date. Apple matches on the symbol, so the declaration has to come from the
+  app; C617.1 is the reason that fits a read of file metadata that is never
+  shown or sent. Re-check this whenever a plugin is added: of the iOS plugins in
+  1.0.6, firebase_core, flutter_zxing, open_filex and safe_device have no
+  manifest of their own, and only safe_device touches a listed API.
 -->
 <plist version="1.0">
 <dict>
@@ -160,6 +167,15 @@
 	</array>
 
 	<key>NSPrivacyAccessedAPITypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
