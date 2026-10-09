@@ -71,6 +71,17 @@ abstract class LocationSource {
   Future<Coordinates?> currentPosition();
 }
 
+/// A source that can put its permission dialog up on its own, without asking
+/// for a fix.
+///
+/// Separate from [LocationSource] because only the real thing has a dialog to
+/// show; see [PunchLocator.settlePermission] for why it is ever needed alone.
+abstract class PermissionPrompting {
+  /// Shows the system permission dialog if one is due, and returns once it has
+  /// been answered. Never throws.
+  Future<void> askPermission();
+}
+
 /// Always declines to supply a location.
 ///
 /// The default in tests, and on desktop where the punch screen is only ever
@@ -90,7 +101,7 @@ class NoLocationSource implements LocationSource {
 /// permission refused, no fix before the deadline, a plugin that throws —
 /// resolves to null and the punch goes anyway. Somebody standing in a lift with
 /// no signal still gets to clock in.
-class GeolocatorLocationSource implements LocationSource {
+class GeolocatorLocationSource implements LocationSource, PermissionPrompting {
   const GeolocatorLocationSource({
     this.fixTimeout = const Duration(seconds: 8),
     this.accuracy = LocationAccuracy.high,
@@ -141,6 +152,17 @@ class GeolocatorLocationSource implements LocationSource {
       // punch without coordinates. Letting any of them escape would turn a
       // recorded detail into a failed clock-in.
       return null;
+    }
+  }
+
+  @override
+  Future<void> askPermission() async {
+    try {
+      // Services off means no dialog would be useful, as in [currentPosition].
+      if (await Geolocator.isLocationServiceEnabled()) await _ensurePermission();
+    } catch (_) {
+      // A permission dialog that cannot be shown is the same as one refused:
+      // the punch goes without coordinates.
     }
   }
 
@@ -198,6 +220,25 @@ class PunchLocator {
   /// which the source can time out for itself. It does not cover a blocked
   /// platform main thread; see the class doc for why nothing here could.
   final Duration deadline;
+
+  /// Gets the location permission dialog answered before anything else asks
+  /// for a permission.
+  ///
+  /// Android shows one permission dialog at a time. The scan check-in starts
+  /// the fix and opens the camera together, so on a first run the location
+  /// dialog was up when the camera asked for its own — that request failed,
+  /// and the scanner told the person to fix the camera in Settings although
+  /// they had never been asked. Seen on a real handset. Instant once the
+  /// question has been answered, so it costs nothing on any later scan.
+  Future<void> settlePermission() async {
+    final source = this.source;
+    if (source is! PermissionPrompting) return;
+    try {
+      await (source as PermissionPrompting).askPermission().timeout(deadline);
+    } catch (_) {
+      // Timed out with the dialog still up: carry on; the camera will ask next.
+    }
+  }
 
   Future<Coordinates?> resolve() async {
     try {

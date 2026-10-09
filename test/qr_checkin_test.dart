@@ -325,6 +325,36 @@ void main() {
     session.dispose();
   });
 
+  // Found on a real handset on a first run: the location dialog was up when the
+  // camera asked for its permission, Android shows one at a time, and the
+  // scanner opened on "allow the camera in Settings" for somebody never asked.
+  testWidgets('the location dialog is answered before the camera opens', (tester) async {
+    final gps = _AskingFix();
+    var openedWhileAsking = false;
+    var opened = false;
+    QrScanScreen.open = (context, {required title, required prefix}) async {
+      opened = true;
+      openedWhileAsking = !gps.answered;
+      return null;
+    };
+    final (session, _) = await signedIn(tester, method: 'qr', locator: PunchLocator(source: gps));
+    await pumpClock(tester, session);
+
+    await tester.tap(find.text('Scan to check in'));
+    await tester.pump();
+
+    expect(gps.asking, isTrue, reason: 'the dialog is up');
+    expect(opened, isFalse, reason: 'and the camera waits for it');
+
+    gps.answerDialog();
+    await settle(tester);
+
+    expect(opened, isTrue);
+    expect(openedWhileAsking, isFalse);
+
+    session.dispose();
+  });
+
   testWidgets('a fix that is not coming does not outlive the code', (tester) async {
     scannerReads('KEMP1:4:abc123');
     final gps = _SlowFix();
@@ -447,6 +477,24 @@ void main() {
 
     session.dispose();
   });
+}
+
+/// A source whose permission dialog stays up until the test answers it.
+class _AskingFix implements LocationSource, PermissionPrompting {
+  final _dialog = Completer<void>();
+  bool asking = false;
+  bool get answered => _dialog.isCompleted;
+
+  void answerDialog() => _dialog.complete();
+
+  @override
+  Future<void> askPermission() {
+    asking = true;
+    return _dialog.future;
+  }
+
+  @override
+  Future<Coordinates?> currentPosition() async => null;
 }
 
 /// A GPS that answers only when the test says so — indoors, in other words.

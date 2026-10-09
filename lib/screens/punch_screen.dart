@@ -464,6 +464,12 @@ class _PunchScreenState extends State<PunchScreen> with RefreshOnShow {
 
     if (_punching) return;
 
+    // The location dialog first, answered, and only then the camera: Android
+    // shows one permission dialog at a time and the camera's lost the race on
+    // a first run. Instant on every scan after that.
+    await session.locator.settlePermission();
+    if (!mounted) return;
+
     // Started before the camera opens, not after the read. A code lives for
     // seconds and an indoor fix can take longer than that, so waiting for the
     // fix once the code was in hand let it expire on the way — seen on a real
