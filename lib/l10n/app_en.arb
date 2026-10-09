@@ -200,6 +200,7 @@
     "statusDayOff": "Day off",
     "statusWeekend": "Weekend",
     "statusAbsent": "Absent",
+    "statusNotYet": "Not yet",
     "tabClock": "Clock",
     "tabHistory": "History",
     "tabLeave": "Leave",
@@ -1333,6 +1334,9 @@
     "@hrDecidedBy": {
         "placeholders": { "name": { "type": "String" } }
     },
+    "hrDecidedApproved": "Approved",
+    "hrDecidedRejected": "Rejected",
+    "hrDecidedWithdrawn": "Withdrawn by the employee",
     "hrPeopleSearch": "Search by name or staff number",
     "hrPeopleEmptyTitle": "Nobody found",
     "hrPeopleEmptyBody": "Try a different name, or include people who have left.",

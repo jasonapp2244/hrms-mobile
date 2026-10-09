@@ -263,6 +263,9 @@ class AppColors {
         'day_off' => (neutral, t.statusDayOff),
         'weekend' => (neutral, t.statusWeekend),
         'absent' => (absent, t.statusAbsent),
+        // Today, before the shift has ended, with nothing punched yet. Neutral
+        // on purpose: it is not an absence until the day is over.
+        'not_yet' => (neutral, t.statusNotYet),
         _ => (neutral, status.isEmpty ? '—' : status),
       };
 }

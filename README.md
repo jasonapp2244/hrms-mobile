@@ -11,7 +11,7 @@ of it.
 ```bash
 flutter pub get
 flutter analyze
-flutter test        # 327 tests
+flutter test        # 383 tests
 ```
 
 `flutter pub get` generates the localisations from `lib/l10n/*.arb` into a
@@ -37,7 +37,7 @@ Demo accounts and what each role sees on a handset are in `CLAUDE.md`, under
 | | |
 |---|---|
 | `lib/` | The app. `core/` is session, API client, models and platform glue; `screens/` is one file per screen |
-| `test/` | 327 tests, all headless. No device needed |
+| `test/` | 383 tests, all headless. No device needed |
 | `integration_test/` | Driven tests, device or emulator |
 | `store/` | Store listing assets |
 | `CLAUDE.md` | **Read this first.** The traps that have already cost time, and the rules at the boundary with the server |

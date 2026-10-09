@@ -33,7 +33,12 @@ void main() {
   late List<String> asked;
   late Directory dir;
 
+  /// What the server says about its today. `present` unless a test is about
+  /// the morning, when the shift is still running and nobody has punched.
+  late String todayStatus;
+
   setUp(() async {
+    todayStatus = 'present';
     dir = await Directory.systemTemp.createTemp('history_calendar_test');
     FlutterSecureStorage.setMockInitialValues({});
   });
@@ -62,13 +67,14 @@ void main() {
 
     for (var d = to; !d.isBefore(from); d = d.subtract(const Duration(days: 1))) {
       final date = iso(d);
-      final absent = date == '2025-04-07';
+      final notYet = date == iso(serverToday) && todayStatus == 'not_yet';
+      final absent = date == '2025-04-07' || notYet;
       final late = date == '2025-04-03';
 
       days.add({
         'date': date,
         'weekday': const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1],
-        'status': absent ? 'absent' : 'present',
+        'status': notYet ? 'not_yet' : (absent ? 'absent' : 'present'),
         'late': late,
         'first_in': absent ? null : '${date}T09:0${late ? 5 : 0}:00+05:00',
         'last_out': absent ? null : '${date}T17:30:00+05:00',
@@ -278,6 +284,24 @@ void main() {
       // the status rather than painting everything the same.
       expect(find.bySemanticsLabel('7 Apr, Absent'), findsOneWidget);
       expect(find.bySemanticsLabel('3 Apr, Late'), findsOneWidget);
+    });
+  });
+
+  testWidgets('today before the shift ends is "Not yet", not an absence',
+      (tester) async {
+    todayStatus = 'not_yet';
+    await pumpHistory(tester, calendarSession());
+
+    // The list, newest first: today is the top row.
+    expect(find.text('Not yet'), findsWidgets);
+
+    await openCalendar(tester);
+
+    await withSemantics(tester, () async {
+      expect(find.bySemanticsLabel('10 Apr, Not yet'), findsOneWidget);
+      expect(find.bySemanticsLabel('10 Apr, Absent'), findsNothing);
+      // The fixture's real absence is still one.
+      expect(find.bySemanticsLabel('7 Apr, Absent'), findsOneWidget);
     });
   });
 

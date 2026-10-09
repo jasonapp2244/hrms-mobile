@@ -184,6 +184,7 @@ void main() {
       bool decideLeave = true,
       bool viewEmployees = true,
       Map<String, dynamic>? pending,
+      List<Map<String, dynamic>> decided = const [],
     }) {
       asked = <String>[];
 
@@ -220,6 +221,10 @@ void main() {
               return _json(
                 pending ?? {'ok': true, 'pending': [], 'pending_count': 0},
               );
+            }
+
+            if (request.url.path.contains('/hr/leave/decided')) {
+              return _json({'ok': true, 'requests': decided});
             }
 
             // The sibling calls answer empty so none of them throws while the
@@ -276,6 +281,35 @@ void main() {
         find.textContaining('once a line manager has seconded them'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('a decided request says how it ended, not only by its icon',
+        (tester) async {
+      Map<String, dynamic> row(int id, String status, String? by) => {
+            'id': id,
+            'employee': 'Emily Johnson',
+            'leave_type': 'Annual Leave',
+            'start_date': '2026-10-19',
+            'end_date': '2026-10-20',
+            'days': 2,
+            'status': status,
+            'decided_by': by,
+          };
+
+      await pumpHr(
+        tester,
+        hrSession(tester, decided: [
+          row(1, 'approved', 'HR Manager'),
+          row(2, 'rejected', 'HR Manager'),
+          row(3, 'cancelled', null),
+        ]),
+      );
+
+      // A rejection and a withdrawal used to share one amber cross and no
+      // words, so HR could not tell "I refused it" from "she took it back".
+      expect(find.textContaining('Approved ·'), findsOneWidget);
+      expect(find.textContaining('Rejected ·'), findsOneWidget);
+      expect(find.textContaining('Withdrawn by the employee ·'), findsOneWidget);
     });
 
     testWidgets('a waiting request carries the balance and the manager step',

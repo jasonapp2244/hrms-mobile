@@ -490,18 +490,23 @@ class _DecidedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.t;
     final colors = AppColors.of(context);
-    final approved = item.status == 'approved';
+
+    // Spelled out, not left to the icon: a rejection and a request the
+    // employee withdrew used to share one amber cross, and a screen reader
+    // heard neither.
+    final (icon, color, label) = switch (item.status) {
+      'approved' => (Icons.check_circle_outline, colors.present, t.hrDecidedApproved),
+      'cancelled' => (Icons.undo, colors.neutral, t.hrDecidedWithdrawn),
+      _ => (Icons.cancel_outlined, colors.absent, t.hrDecidedRejected),
+    };
 
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        approved ? Icons.check_circle_outline : Icons.cancel_outlined,
-        color: approved ? colors.present : colors.late,
-      ),
+      leading: Icon(icon, color: color),
       title: Text('${item.employee} · ${item.leaveType}'),
       subtitle: Text(
-        '${Fmt.range(t, item.startDate, item.endDate)}'
+        '$label · ${Fmt.range(t, item.startDate, item.endDate)}'
         '${item.decidedBy != null ? ' · ${t.hrDecidedBy(item.decidedBy!)}' : ''}',
       ),
     );

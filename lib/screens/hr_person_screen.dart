@@ -130,6 +130,9 @@ class _HrPersonScreenState extends State<HrPersonScreen> {
                       (t.hrPersonGender, Fmt.gender(t, record.gender)),
                       (t.hrPersonNationalId, record.nationalId),
                       (t.hrPersonBloodGroup, record.bloodGroup),
+                      // Sent all along and never drawn, which left HR holding
+                      // a phone with no way to find the number to ring.
+                      (t.hrPersonPhone, record.summary.phone),
                       (t.hrPersonPersonalEmail, record.personalEmail),
                       (
                         t.hrPersonAddress,

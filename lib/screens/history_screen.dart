@@ -758,6 +758,7 @@ class _Stat extends StatelessWidget {
       'leave' => Icons.beach_access,
       'absent' => Icons.close,
       'holiday' => Icons.flag_outlined,
+      'not_yet' => Icons.hourglass_empty,
       // A day off and a weekend are shaded and left blank: nothing happened on
       // them, and nothing was supposed to.
       _ => null,
@@ -991,6 +992,7 @@ class _Legend extends StatelessWidget {
       (Icons.beach_access, colors.leave, t.statusOnLeave),
       (Icons.close, colors.absent, t.statusAbsent),
       (Icons.flag_outlined, colors.neutral, t.statusHoliday),
+      (Icons.hourglass_empty, colors.neutral, t.statusNotYet),
     ];
 
     return Wrap(

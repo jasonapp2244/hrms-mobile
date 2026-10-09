@@ -3,7 +3,7 @@
 > an endpoint or an error code that is missing from it. Nothing enforces the freshness of
 > *this* file — it is stamped instead.
 >
-> Taken from `hr-backend` @ **d03164b** (2026-10-01). If the API behaves differently from
+> Taken from `hr-backend` @ **3a71d21** (2026-10-09). If the API behaves differently from
 > what is written here, the backend is right and this copy is stale.
 >
 > The content is byte-identical to the backend's copy below this stamp; re-check with
@@ -784,7 +784,11 @@ Maximum window: **92 days**.
 | `holiday` | Company holiday, no punch. |
 | `day_off` | Rostered off, no punch. |
 | `weekend` | Not a working day for this company. |
-| `absent` | A working day nobody planned off, not booked, not shown up for. |
+| `absent` | A working day nobody planned off, not booked, not shown up for — once its shift has ended. |
+| `not_yet` | The same day **before** its shift has ended (or, with no shift, before midnight in the company's zone). Today, most mornings. Not an absence and not in the score; it becomes `absent` when the shift ends with no punch. |
+
+A client that does not recognise a `status` must show it neutrally, never as
+an absence: the vocabulary has grown before and may again.
 
 A day never clocked out of reports `worked_minutes: 0` — there is no honest
 number for a stretch that was never closed.
@@ -1116,6 +1120,12 @@ company-wide attendance lives.
 `status` uses the same vocabulary as `/attendance/history` — `present`, `leave`,
 `holiday`, `day_off`, `weekend`, `absent` — and is computed by the same code, so
 a manager and the person they manage never see two different words for one day.
+**One deliberate exception: this endpoint never says `not_yet`.** Somebody with
+no punch on a day whose shift is still running is `absent` here — the web
+dashboard labels it *Unaccounted* — because "who has not turned up yet" is
+exactly what a manager opens the team view to ask. The employee's own history
+calls the same morning `not_yet`, because it is their record and the day is not
+over.
 
 **`in_now` is not `present`.** Somebody who worked this morning and went home is
 present for the day but not on the floor. A manager asking "who is here" wants
