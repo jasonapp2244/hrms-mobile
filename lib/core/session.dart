@@ -52,6 +52,7 @@ class Session extends ChangeNotifier {
               source: GeolocatorLocationSource(),
               integrity: SafeDeviceIntegrity(),
             ) {
+    this.api.onUnauthenticated = () => unawaited(_sessionRevoked());
     push = PushService(api: this.api, provider: pushProvider);
     actions = QuickActionService(provider: quickActions);
     lock = AppLock(authenticator: biometrics, storage: _storage);
@@ -531,6 +532,23 @@ class Session extends ChangeNotifier {
     _user = null;
     notifyListeners();
     return revoked;
+  }
+
+  bool _revoking = false;
+
+  /// The server refused this session's token mid-use. Same outcome as a
+  /// revoked token found at launch: clear it and show the login screen. Guarded
+  /// because one screen can fire several requests that all come back 401.
+  Future<void> _sessionRevoked() async {
+    if (_revoking || !isSignedIn) return;
+    _revoking = true;
+    try {
+      await _clearToken();
+      _user = null;
+      notifyListeners();
+    } finally {
+      _revoking = false;
+    }
   }
 
   /// Re-reads the signed-in user. Worth calling when returning to the app:

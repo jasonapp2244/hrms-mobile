@@ -133,6 +133,14 @@ class ApiClient {
   /// login and on session restore; cleared on logout.
   String? token;
 
+  /// Called when a request made *with* a token is answered `unauthenticated`:
+  /// the server has revoked this session — a password reset, logout-all from
+  /// another phone, an account switched off. Set by [Session], which signs the
+  /// person out so the app returns to the login screen. Without it every screen
+  /// showed "Authentication required" under a Try again button that could only
+  /// ever fail the same way.
+  void Function()? onUnauthenticated;
+
   /// The language this handset is reading the app in (B6.2), for
   /// `Accept-Language`. Set by [Session] from `AppLocale`, and kept in step
   /// with it — a header naming a language the person switched away from an
@@ -268,13 +276,15 @@ class ApiClient {
         // A failure that is not JSON either — a web-server error page.
       }
 
-      throw ApiException(
+      final error = ApiException(
         error: '${decoded['error'] ?? 'download_failed'}',
         // Empty rather than an English sentence when the server named none:
         // see [ApiException.displayMessage].
         message: '${decoded['message'] ?? ''}',
         statusCode: response.statusCode,
       );
+      _reportRevoked(error);
+      throw error;
     }
 
     return (
@@ -343,12 +353,20 @@ class ApiClient {
 
     if (decoded['ok'] == true) return decoded;
 
-    throw ApiException(
+    final error = ApiException(
       error: (decoded['error'] as String?) ?? 'server_error',
       message: (decoded['message'] as String?) ?? '',
       statusCode: response.statusCode,
       fieldErrors: _parseFieldErrors(decoded['errors']),
     );
+    _reportRevoked(error);
+    throw error;
+  }
+
+  /// Only for a request that carried a token: a 401 on the login form is a
+  /// wrong password, not a session ending.
+  void _reportRevoked(ApiException error) {
+    if (error.isUnauthenticated && token != null) onUnauthenticated?.call();
   }
 
   Map<String, List<String>> _parseFieldErrors(Object? raw) {
