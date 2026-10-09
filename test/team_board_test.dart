@@ -23,7 +23,7 @@ import 'package:http/testing.dart';
 ///
 /// **The mock's today is deliberately not the handset's.** Attendance is judged
 /// in the company's timezone and the phone is wherever its owner is, so the two
-/// disagree for part of every day — a phone in Karachi is already on the 12th
+/// disagree for part of every day — a phone still on UTC is already on the 12th
 /// while a New York office is still on the 11th. An earlier version of this
 /// screen built the date from `DateTime.now()` and every one of these tests
 /// passed, because the test device and the fake server shared a clock. On a

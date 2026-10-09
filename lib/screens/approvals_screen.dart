@@ -521,7 +521,7 @@ class _TeamTabState extends State<_TeamTab> with RefreshOnShow {
   /// What the **server** calls today, learned from its own reply.
   ///
   /// Not `DateTime.now()`. Attendance is judged in the company's timezone, and
-  /// the handset is wherever its owner is: a phone on Asia/Karachi reads 12 Sep
+  /// the handset is wherever its owner is: a phone still on UTC reads 12 Sep
   /// while a New York company is still on the 11th, so asking for the handset's
   /// today asks for a day that has not happened and the board fails with
   /// "That day has not happened yet" — every night, for anybody east of the

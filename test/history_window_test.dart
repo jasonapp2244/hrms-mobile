@@ -22,7 +22,7 @@ import 'support/settle.dart';
 ///
 /// The handset does not get a vote. Attendance is judged in the company's
 /// timezone and the phone is wherever its owner is, so for part of every day
-/// the two disagree about the date — a phone in Karachi is on the 12th while a
+/// the two disagree about the date — a phone still on UTC is on the 12th while a
 /// New York company is still on the 11th.
 ///
 /// That disagreement is quiet here in a way it is not elsewhere: rather than
